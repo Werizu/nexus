@@ -4,7 +4,8 @@ import DeviceCard from './components/DeviceCard'
 import SceneCard from './components/SceneCard'
 import PiMonitor from './components/PiMonitor'
 import LogViewer from './components/LogViewer'
-import { useDevices, useScenes, useHealth, usePis, useWebSocket, useLogs } from './hooks/useNexus'
+import RoomView from './components/RoomView'
+import { useDevices, useScenes, useHealth, usePis, useWebSocket, useLogs, useRooms } from './hooks/useNexus'
 
 function App() {
   const { devices, loading, refresh, sendCommand } = useDevices()
@@ -12,6 +13,7 @@ function App() {
   const health = useHealth()
   const { pis } = usePis()
   const { logs } = useLogs()
+  const { rooms } = useRooms()
   const [activeTab, setActiveTab] = useState('dashboard')
 
   const handleWsMessage = useCallback((data) => {
@@ -42,6 +44,7 @@ function App() {
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'devices', label: 'Geräte' },
     { id: 'scenes', label: 'Szenen' },
+    { id: 'rooms', label: 'Räume' },
     { id: 'pis', label: 'Pi Monitor' },
     { id: 'logs', label: 'Logs' },
   ]
@@ -139,6 +142,11 @@ function App() {
                   <SceneCard key={scene.name} scene={scene} onTrigger={trigger} />
                 ))}
               </div>
+            )}
+
+            {/* Rooms Tab */}
+            {activeTab === 'rooms' && (
+              <RoomView rooms={rooms} onCommand={sendCommand} />
             )}
 
             {/* Pi Monitor Tab */}

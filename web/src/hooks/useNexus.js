@@ -113,6 +113,16 @@ export function useLogs() {
   return { logs, refresh }
 }
 
+export function useRooms() {
+  const [rooms, setRooms] = useState({})
+
+  useEffect(() => {
+    api('/rooms').then(setRooms).catch(console.error)
+  }, [])
+
+  return { rooms }
+}
+
 export function useWebSocket(onMessage) {
   const wsRef = useRef(null)
 
