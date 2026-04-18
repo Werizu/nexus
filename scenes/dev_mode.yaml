@@ -39,17 +39,30 @@ actions:
     wait_until_online: true
     timeout: 90
 
-  # 5. IDE und Terminals starten
+  # 5. IDE und Terminals auf dem PC starten
   - action: pc.launch
     device: main_pc
     program: "code"
     args: []
 
-  - action: wait
-    seconds: 3
-
-  # 6. Windows Terminal öffnen
   - action: pc.launch
     device: main_pc
     program: "wt"
+    args: []
+
+  # 6. Mac: NEXUS Dashboard im Browser öffnen
+  - action: pc.open_url
+    device: main_mac
+    url: "http://192.168.178.202"
+
+  # 7. Mac: SSH-Terminal zum Pi öffnen
+  - action: pc.ssh_terminal
+    device: main_mac
+    host: "192.168.178.202"
+    user: "marlon"
+
+  # 8. Mac: Terminal öffnen
+  - action: pc.open_app
+    device: main_mac
+    app: "Terminal"
     args: []

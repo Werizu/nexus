@@ -93,6 +93,22 @@ $env:NEXUS_BRAIN="192.168.178.100"; irm https://werizu.github.io/nexus/install.p
 
 The agent installs as a Windows service (`NexusAgent`) and auto-connects to the Brain.
 
+### 4. Agent (macOS)
+
+Run in **Terminal**:
+
+```bash
+curl -fsSL https://werizu.github.io/nexus/install-mac.sh | bash
+```
+
+Or with a custom Brain IP:
+
+```bash
+NEXUS_BRAIN="192.168.178.100" curl -fsSL https://werizu.github.io/nexus/install-mac.sh | bash
+```
+
+The agent installs as a LaunchAgent and auto-starts on login. Commands: open apps/URLs, SSH terminals, RDP connect, notifications, volume, brightness, dark mode, screenshots, system monitoring.
+
 ## Configuration
 
 ### devices.yaml
@@ -177,6 +193,9 @@ sudo docker logs nexus-mqtt --tail 20
 
 # Agent logs (Windows)
 Get-Content "C:\Program Files\NEXUS Agent\nexus-agent.log" -Tail 20
+
+# Agent logs (macOS)
+tail -f ~/.nexus-agent/nexus-agent-mac.log
 ```
 
 ### Agent Service (Windows)
@@ -188,6 +207,18 @@ Stop-Service NexusAgent         # Stop
 
 # Uninstall
 python "C:\Program Files\NEXUS Agent\nexus_service.py" remove
+```
+
+### Agent Service (macOS)
+
+```bash
+launchctl list | grep nexus                                          # Status
+launchctl unload ~/Library/LaunchAgents/com.nexus.agent.plist        # Stop
+launchctl load ~/Library/LaunchAgents/com.nexus.agent.plist          # Start
+
+# Uninstall
+launchctl unload ~/Library/LaunchAgents/com.nexus.agent.plist
+rm -rf ~/.nexus-agent ~/Library/LaunchAgents/com.nexus.agent.plist
 ```
 
 ### Backup
@@ -224,7 +255,8 @@ Base URL: `http://<pi-ip>:8000/api/v1`
 
 ```
 nexus/
-├── agent/          # PC Agent (Python service)
+├── agent/          # Windows PC Agent (Python service)
+├── agent-mac/      # macOS Agent (Python + LaunchAgent)
 ├── alexa-skill/    # Alexa interaction model
 ├── config/         # System configuration
 ├── core/           # FastAPI backend

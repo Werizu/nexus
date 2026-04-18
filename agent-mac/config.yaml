@@ -1,0 +1,16 @@
+# NEXUS Mac Agent Configuration
+mqtt:
+  broker: "192.168.178.202"
+  port: 1883
+  client_id: "nexus-agent-mac"
+
+agent:
+  device_id: "main_mac"
+  name: "MacBook"
+  report_interval: 10
+
+alerts:
+  cpu: 90
+  ram: 90
+  disk: 90
+  cooldown: 300

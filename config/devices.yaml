@@ -15,6 +15,12 @@ devices:
       os: windows
       check_port: 3389
 
+    - id: main_mac
+      name: "MacBook"
+      plugin: pc_control
+      room: office
+      os: macos
+
   pis:
     - id: brain
       name: "NEXUS Brain"

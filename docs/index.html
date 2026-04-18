@@ -242,7 +242,35 @@
         </section>
 
         <section>
+            <h2>NEXUS Mac Agent — Installation</h2>
+            <div class="install-section">
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <span class="step-title">Voraussetzung: Python 3.10+</span>
+                    <p class="step-desc">Bereits auf macOS vorhanden, oder: <code>brew install python3</code></p>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <span class="step-title">Terminal öffnen und Installer ausführen</span>
+                    <pre><code><span class="comment"># Standard-Installation (Brain IP: 192.168.178.202)</span>
+<span class="cmd">curl</span> -fsSL https://werizu.github.io/nexus/install-mac.sh | <span class="cmd">bash</span>
+
+<span class="comment"># Oder mit eigener Brain-IP:</span>
+<span class="cmd">NEXUS_BRAIN</span>="192.168.178.100" <span class="cmd">curl</span> -fsSL https://werizu.github.io/nexus/install-mac.sh | <span class="cmd">bash</span></code></pre>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <span class="step-title">Fertig!</span>
+                    <p class="step-desc">Der Agent läuft als LaunchAgent und startet automatisch bei Login.</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
             <h2>Agent-Befehle</h2>
+            <h3 style="color:#888;font-size:0.9rem;margin-bottom:0.8rem;">Windows</h3>
             <pre><code><span class="comment"># Service-Status prüfen</span>
 Get-Service NexusAgent
 
@@ -255,6 +283,21 @@ python "C:\Program Files\NEXUS Agent\nexus_service.py" remove
 
 <span class="comment"># Logs anzeigen</span>
 Get-Content "C:\Program Files\NEXUS Agent\nexus-agent.log" -Tail 20</code></pre>
+
+            <h3 style="color:#888;font-size:0.9rem;margin:1.2rem 0 0.8rem;">macOS</h3>
+            <pre><code><span class="comment"># Status prüfen</span>
+launchctl list | grep nexus
+
+<span class="comment"># Agent stoppen / starten</span>
+launchctl unload ~/Library/LaunchAgents/com.nexus.agent.plist
+launchctl load ~/Library/LaunchAgents/com.nexus.agent.plist
+
+<span class="comment"># Agent deinstallieren</span>
+launchctl unload ~/Library/LaunchAgents/com.nexus.agent.plist
+rm -rf ~/.nexus-agent ~/Library/LaunchAgents/com.nexus.agent.plist
+
+<span class="comment"># Logs anzeigen</span>
+tail -f ~/.nexus-agent/nexus-agent-mac.log</code></pre>
         </section>
 
         <div class="footer">
