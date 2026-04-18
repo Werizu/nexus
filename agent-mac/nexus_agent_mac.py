@@ -293,7 +293,13 @@ class NexusMacAgent:
     def _rdp_connect(self, host: str) -> str:
         if not host:
             raise ValueError("No host specified")
-        subprocess.Popen(["open", f"rdp://full%20address=s:{host}"])
+        rdp_file = Path(__file__).parent / "connect.rdp"
+        rdp_file.write_text(
+            f"full address:s:{host}\n"
+            f"prompt for credentials:i:0\n"
+            f"administrative session:i:1\n"
+        )
+        subprocess.Popen(["open", str(rdp_file)])
         return f"RDP connecting to {host}"
 
     def _ssh_terminal(self, host: str, user: str, key: str = "") -> str:

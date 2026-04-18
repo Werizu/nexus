@@ -39,24 +39,12 @@ actions:
     wait_until_online: true
     timeout: 90
 
-  # 5. IDE und Terminals auf dem PC starten
-  - action: pc.launch
-    device: main_pc
-    program: "code"
-    args: []
-
-  - action: pc.launch
-    device: main_pc
-    program: "wt"
-    args: []
+  # 5. Mac: RDP zum PC öffnen
+  - action: pc.rdp_connect
+    device: main_mac
+    host: "192.168.178.43"
 
   # 6. Mac: NEXUS Dashboard im Browser öffnen
   - action: pc.open_url
     device: main_mac
     url: "http://192.168.178.202"
-
-  # 7. Mac: SSH-Terminal zum Pi öffnen
-  - action: pc.ssh_terminal
-    device: main_mac
-    host: "192.168.178.202"
-    user: "marlon"
