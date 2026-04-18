@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  nexus-brain:
+    build: .
+    container_name: nexus-brain
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/app/config
+      - ./scenes:/app/scenes
+      - ./data:/app/data
+      - ./pi_manager_rsa:/root/.ssh/pi_manager_rsa:ro
+    depends_on:
+      - mosquitto
+    environment:
+      - NEXUS_ENV=production
+      - MQTT_BROKER=mosquitto
+    networks:
+      - nexus
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: nexus-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    networks:
+      - nexus
+
+networks:
+  nexus:
+    driver: bridge
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
