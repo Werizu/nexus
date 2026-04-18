@@ -50,6 +50,9 @@ async def lifespan(app: FastAPI):
     # MQTT runs in background — don't block if broker is unavailable
     await mqtt_client.start()
 
+    # Wire up MQTT agent messages to pc_control plugin
+    _setup_agent_mqtt()
+
     # Initial state refresh for all devices
     asyncio.create_task(refresh_all_device_states())
     # Periodic state refresh every 30 seconds
@@ -63,6 +66,32 @@ async def lifespan(app: FastAPI):
     _refresh_task.cancel()
     await mqtt_client.stop()
     await state_store.close()
+
+
+def _setup_agent_mqtt():
+    """Subscribe to MQTT agent topics and route to pc_control plugin."""
+    pc_plugin = plugin_manager.plugins.get("pc_control")
+    if not pc_plugin:
+        return
+    pc_plugin.set_mqtt_client(mqtt_client)
+
+    async def on_agent_state(topic: str, data: dict):
+        parts = topic.split("/")
+        if len(parts) >= 4:
+            device_id = parts[2]
+            pc_plugin.handle_agent_state(device_id, data)
+            await state_store.update_device(device_id, data)
+            await ws_manager.broadcast({"event": "device_update", "device_id": device_id, "state": data})
+
+    async def on_agent_response(topic: str, data: dict):
+        parts = topic.split("/")
+        if len(parts) >= 4:
+            device_id = parts[2]
+            pc_plugin.handle_agent_response(device_id, data)
+
+    mqtt_client.subscribe("nexus/agent/+/state", on_agent_state)
+    mqtt_client.subscribe("nexus/agent/+/response", on_agent_response)
+    logger.info("Agent MQTT handlers registered")
 
 
 async def refresh_all_device_states():

@@ -53,8 +53,21 @@ export default function DeviceCard({ device, onCommand }) {
             <div className="text-white font-mono">{state.ram}%</div>
           </div>
           <div className="bg-[#1e1e2e] rounded-lg p-2 text-center">
-            <div className="text-gray-500">Temp</div>
-            <div className="text-white font-mono">{state.temp}°</div>
+            <div className="text-gray-500">{state.temp !== undefined ? 'Temp' : 'Disk'}</div>
+            <div className="text-white font-mono">{state.temp !== undefined ? `${state.temp}°` : `${state.disk}%`}</div>
+          </div>
+        </div>
+      )}
+
+      {state.gpu && (
+        <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+          <div className="bg-[#1e1e2e] rounded-lg p-2 text-center col-span-2">
+            <div className="text-gray-500">GPU</div>
+            <div className="text-white font-mono text-[10px] truncate">{state.gpu.name}</div>
+          </div>
+          <div className="bg-[#1e1e2e] rounded-lg p-2 text-center">
+            <div className="text-gray-500">GPU</div>
+            <div className="text-white font-mono">{state.gpu.load}%</div>
           </div>
         </div>
       )}

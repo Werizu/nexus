@@ -1,6 +1,7 @@
-"""PC Control Plugin — Wake-on-LAN, SSH commands, status checks."""
+"""PC Control Plugin — MQTT Agent + WOL fallback."""
 
 import asyncio
+import json
 import logging
 import socket
 from pathlib import Path
@@ -14,42 +15,39 @@ logger = logging.getLogger("nexus.plugin.pc_control")
 
 class PCControlPlugin(BasePlugin):
     name = "pc_control"
-    version = "1.0.0"
+    version = "2.0.0"
     device_type = "computer"
 
     def __init__(self):
         super().__init__()
+        self._mqtt_client = None
+        self._agent_states: dict[str, dict] = {}
+        self._pending_responses: dict[str, asyncio.Future] = {}
 
     async def initialize(self, config: dict) -> bool:
-        logger.info("PC Control plugin initialized")
+        logger.info("PC Control plugin initialized (MQTT agent mode)")
         return True
 
-    def _resolve_key(self, key: str) -> str | None:
-        expanded = Path(key).expanduser()
-        if expanded.exists():
-            return str(expanded)
-        fallback = Path("/root/.ssh/pi_manager_rsa")
-        if fallback.exists():
-            return str(fallback)
-        return None
+    def set_mqtt_client(self, mqtt_client):
+        self._mqtt_client = mqtt_client
 
-    def _ssh_args(self, device: dict) -> list[str]:
-        user = device.get("ssh_user", "marlon")
-        ip = device.get("ip", "")
-        key = device.get("ssh_key", "")
+    def handle_agent_state(self, device_id: str, state: dict):
+        self._agent_states[device_id] = state
+        logger.debug(f"Agent state update for {device_id}: online={state.get('online')}")
 
-        args = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5"]
-        if key:
-            resolved = self._resolve_key(key)
-            if resolved:
-                args += ["-i", resolved]
-        args.append(f"{user}@{ip}")
-        return args
+    def handle_agent_response(self, device_id: str, response: dict):
+        request_id = response.get("request_id", "")
+        if request_id in self._pending_responses:
+            self._pending_responses[request_id].set_result(response)
 
     async def get_state(self, device_id: str) -> dict:
         device = self.get_device_config(device_id)
         if not device:
             return {"online": False, "error": "Not registered"}
+
+        agent_state = self._agent_states.get(device_id)
+        if agent_state and agent_state.get("online"):
+            return agent_state
 
         ip = device.get("ip")
         os_type = device.get("os", "linux")
@@ -69,23 +67,51 @@ class PCControlPlugin(BasePlugin):
         if not device:
             return False
 
+        if command == "wake":
+            return await self._wake(device)
+
+        if self._has_agent(device_id):
+            return await self._send_agent_command(device_id, command, params)
+
         match command:
-            case "wake":
-                return await self._wake(device)
-            case "ssh_run":
-                script = params.get("script", "")
-                return await self._ssh_run(device, script)
-            case "shutdown":
-                if device.get("os") == "windows":
-                    return await self._ssh_run(device, "shutdown /s /t 0")
-                return await self._ssh_run(device, "sudo shutdown -h now")
-            case "restart":
-                if device.get("os") == "windows":
-                    return await self._ssh_run(device, "shutdown /r /t 0")
-                return await self._ssh_run(device, "sudo reboot")
+            case "shutdown" | "restart" | "sleep" | "lock" | "run" | "launch" | "processes" | "kill":
+                logger.warning(f"Agent not connected for {device_id}, cannot execute '{command}'")
+                return False
             case _:
                 logger.warning(f"Unknown PC command: {command}")
                 return False
+
+    def _has_agent(self, device_id: str) -> bool:
+        state = self._agent_states.get(device_id, {})
+        return state.get("online", False)
+
+    async def _send_agent_command(self, device_id: str, command: str, params: dict) -> bool:
+        if not self._mqtt_client:
+            logger.error("No MQTT client available")
+            return False
+
+        import uuid
+        request_id = str(uuid.uuid4())[:8]
+        topic = f"nexus/agent/{device_id}/cmd"
+        payload = {"command": command, "params": params, "request_id": request_id}
+
+        future = asyncio.get_event_loop().create_future()
+        self._pending_responses[request_id] = future
+
+        try:
+            await self._mqtt_client.publish(topic, payload)
+            response = await asyncio.wait_for(future, timeout=15)
+            success = response.get("status") == "ok"
+            if success:
+                logger.info(f"Agent {device_id}: {command} → {response.get('result', 'ok')}")
+            else:
+                logger.warning(f"Agent {device_id}: {command} failed → {response.get('error', '?')}")
+            return success
+        except asyncio.TimeoutError:
+            logger.warning(f"Agent {device_id}: {command} timed out")
+            return False
+        finally:
+            self._pending_responses.pop(request_id, None)
 
     async def _wake(self, device: dict) -> bool:
         mac = device.get("mac_address", "")
@@ -98,26 +124,6 @@ class PCControlPlugin(BasePlugin):
             return True
         except Exception as e:
             logger.error(f"WOL failed: {e}")
-            return False
-
-    async def _ssh_run(self, device: dict, command: str) -> bool:
-        try:
-            args = self._ssh_args(device) + [command]
-            proc = await asyncio.create_subprocess_exec(
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
-            logger.info(f"SSH {device.get('ip')}: {command} → exit {proc.returncode}")
-            if proc.returncode != 0:
-                logger.warning(f"SSH stderr: {stderr.decode()}")
-            return proc.returncode == 0
-        except asyncio.TimeoutError:
-            logger.error(f"SSH timeout for {device.get('ip')}")
-            return False
-        except Exception as e:
-            logger.error(f"SSH failed: {e}")
             return False
 
     async def _ping(self, ip: str) -> bool:
@@ -153,7 +159,6 @@ class PCControlPlugin(BasePlugin):
             sock.close()
 
     async def _arp_check(self, ip: str) -> bool:
-        # Trigger ARP resolution with a ping first
         ping = await asyncio.create_subprocess_exec(
             "ping", "-c", "1", "-W", "1", ip,
             stdout=asyncio.subprocess.DEVNULL,
@@ -176,4 +181,5 @@ class PCControlPlugin(BasePlugin):
             return False
 
     async def get_capabilities(self) -> list[str]:
-        return ["wake_on_lan", "ssh_command", "status_check", "shutdown"]
+        return ["wake_on_lan", "shutdown", "restart", "sleep", "lock", "run_command",
+                "launch_program", "system_info", "processes", "kill_process", "screenshot"]
