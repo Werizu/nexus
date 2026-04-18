@@ -47,8 +47,12 @@ alerts:
   cooldown: 300
 EOF
 
-# Install deps
-python3 -m pip install --quiet -r "$INSTALL_DIR/requirements.txt" 2>/dev/null
+# Create venv and install deps
+if [ ! -d "$INSTALL_DIR/venv" ]; then
+    python3 -m venv "$INSTALL_DIR/venv"
+fi
+"$INSTALL_DIR/venv/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt"
+echo "  Dependencies installed"
 
 # Unload existing service if present
 if launchctl list | grep -q "$PLIST_NAME" 2>/dev/null; then
@@ -56,7 +60,7 @@ if launchctl list | grep -q "$PLIST_NAME" 2>/dev/null; then
 fi
 
 # Create LaunchAgent plist
-PYTHON_PATH=$(which python3)
+PYTHON_PATH="$INSTALL_DIR/venv/bin/python"
 cat > "$PLIST_PATH" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
