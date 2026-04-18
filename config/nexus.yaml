@@ -1,0 +1,32 @@
+# NEXUS System Configuration
+system:
+  name: NEXUS
+  version: "1.0.0"
+  host: "0.0.0.0"
+  port: 8000
+  log_level: info
+
+mqtt:
+  broker: "192.168.178.202"
+  port: 1883
+  client_id: "nexus-brain"
+  topic_prefix: "nexus"
+
+auth:
+  enabled: false
+  # bearer_token configured in secrets.yaml
+
+database:
+  path: "data/nexus.db"
+
+plugins:
+  auto_discover: true
+  directory: "plugins"
+
+scenes:
+  directory: "scenes"
+  allow_parallel: true
+
+websocket:
+  path: "/ws/realtime"
+  ping_interval: 25
