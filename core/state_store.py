@@ -42,8 +42,22 @@ class StateStore:
                 data TEXT DEFAULT '{}'
             );
 
+            CREATE TABLE IF NOT EXISTS alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL NOT NULL,
+                device_id TEXT NOT NULL,
+                type TEXT NOT NULL,
+                value REAL,
+                threshold REAL,
+                message TEXT NOT NULL,
+                severity TEXT DEFAULT 'warning',
+                acknowledged INTEGER DEFAULT 0
+            );
+
             CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_logs_device ON logs(device);
+            CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_alerts_device ON alerts(device_id);
         """)
         await self.db.commit()
 
@@ -135,6 +149,45 @@ class StateStore:
             }
             for r in rows
         ]
+
+    # ─── Alerts ───
+    async def add_alert(self, device_id: str, alert: dict):
+        await self.db.execute(
+            "INSERT INTO alerts (timestamp, device_id, type, value, threshold, message, severity) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (alert.get("timestamp", time.time()), device_id, alert["type"],
+             alert.get("value"), alert.get("threshold"), alert["message"],
+             alert.get("severity", "warning"))
+        )
+        await self.db.commit()
+
+    async def get_alerts(self, device_id: str | None = None, limit: int = 50, unacked_only: bool = False) -> list[dict]:
+        query = "SELECT * FROM alerts WHERE 1=1"
+        params: list = []
+        if device_id:
+            query += " AND device_id = ?"
+            params.append(device_id)
+        if unacked_only:
+            query += " AND acknowledged = 0"
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": r["id"], "timestamp": r["timestamp"], "device_id": r["device_id"],
+                "type": r["type"], "value": r["value"], "threshold": r["threshold"],
+                "message": r["message"], "severity": r["severity"], "acknowledged": bool(r["acknowledged"]),
+            }
+            for r in rows
+        ]
+
+    async def acknowledge_alert(self, alert_id: int):
+        await self.db.execute("UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
+        await self.db.commit()
+
+    async def acknowledge_all_alerts(self):
+        await self.db.execute("UPDATE alerts SET acknowledged = 1 WHERE acknowledged = 0")
+        await self.db.commit()
 
     async def close(self):
         if self.db:

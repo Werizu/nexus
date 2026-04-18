@@ -138,6 +138,38 @@ export function useLogs() {
   return { logs, refresh }
 }
 
+export function useAlerts() {
+  const [alerts, setAlerts] = useState([])
+
+  const refresh = useCallback(async () => {
+    try {
+      setAlerts(await api('/alerts?limit=50'))
+    } catch (e) {
+      console.error('Failed to load alerts:', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    refresh()
+    const interval = setInterval(refresh, 10000)
+    return () => clearInterval(interval)
+  }, [refresh])
+
+  const acknowledge = useCallback(async (alertId) => {
+    await api(`/alerts/${alertId}/ack`, { method: 'POST' })
+    await refresh()
+  }, [refresh])
+
+  const acknowledgeAll = useCallback(async () => {
+    await api('/alerts/ack-all', { method: 'POST' })
+    await refresh()
+  }, [refresh])
+
+  const unackedCount = alerts.filter(a => !a.acknowledged).length
+
+  return { alerts, refresh, acknowledge, acknowledgeAll, unackedCount }
+}
+
 export function useRooms() {
   const [rooms, setRooms] = useState({})
 

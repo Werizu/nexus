@@ -8,3 +8,11 @@ agent:
   device_id: "main_pc"
   name: "Desktop PC"
   report_interval: 10
+
+alerts:
+  cpu: 90
+  ram: 90
+  disk: 90
+  gpu_temp: 85
+  gpu_load: 95
+  cooldown: 300

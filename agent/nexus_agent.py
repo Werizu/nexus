@@ -45,6 +45,7 @@ class NexusAgent:
     def __init__(self, config: dict):
         mqtt_conf = config.get("mqtt", {})
         agent_conf = config.get("agent", {})
+        alerts_conf = config.get("alerts", {})
 
         self.broker = mqtt_conf.get("broker", "192.168.178.202")
         self.port = mqtt_conf.get("port", 1883)
@@ -53,12 +54,25 @@ class NexusAgent:
         self.device_name = agent_conf.get("name", platform.node())
         self.report_interval = agent_conf.get("report_interval", 10)
 
+        self._alert_thresholds = {
+            "cpu": alerts_conf.get("cpu", 90),
+            "ram": alerts_conf.get("ram", 90),
+            "disk": alerts_conf.get("disk", 90),
+            "gpu_temp": alerts_conf.get("gpu_temp", 85),
+            "gpu_load": alerts_conf.get("gpu_load", 95),
+        }
+        self._alert_cooldowns: dict[str, float] = {}
+        self._alert_cooldown_secs = alerts_conf.get("cooldown", 300)
+        self._net_prev: dict | None = None
+        self._net_prev_time: float = 0
+
         self._running = False
         self._client: mqtt.Client | None = None
         self._topic_base = f"nexus/agent/{self.device_id}"
         self._cmd_topic = f"{self._topic_base}/cmd"
         self._state_topic = f"{self._topic_base}/state"
         self._response_topic = f"{self._topic_base}/response"
+        self._alert_topic = f"{self._topic_base}/alert"
 
     def start(self):
         logger.info(f"NEXUS Agent starting (device: {self.device_id}, broker: {self.broker}:{self.port})")
@@ -220,7 +234,67 @@ class NexusAgent:
         except (AttributeError, Exception):
             pass
 
+        info["network"] = self._get_network_stats()
+
         return info
+
+    def _get_network_stats(self) -> dict:
+        counters = psutil.net_io_counters()
+        now = time.time()
+        result = {
+            "bytes_sent": counters.bytes_sent,
+            "bytes_recv": counters.bytes_recv,
+            "download_speed": 0.0,
+            "upload_speed": 0.0,
+        }
+        if self._net_prev and (now - self._net_prev_time) > 0:
+            dt = now - self._net_prev_time
+            result["download_speed"] = round((counters.bytes_recv - self._net_prev["bytes_recv"]) / dt / 1024 / 1024, 2)
+            result["upload_speed"] = round((counters.bytes_sent - self._net_prev["bytes_sent"]) / dt / 1024 / 1024, 2)
+        self._net_prev = {"bytes_sent": counters.bytes_sent, "bytes_recv": counters.bytes_recv}
+        self._net_prev_time = now
+
+        try:
+            conns = psutil.net_connections(kind="inet")
+            result["active_connections"] = len([c for c in conns if c.status == "ESTABLISHED"])
+        except (psutil.AccessDenied, Exception):
+            result["active_connections"] = 0
+
+        return result
+
+    def _check_alerts(self, state: dict):
+        now = time.time()
+        alerts = []
+
+        checks = [
+            ("cpu", state.get("cpu", 0), self._alert_thresholds["cpu"], "CPU bei {val}%"),
+            ("ram", state.get("ram", 0), self._alert_thresholds["ram"], "RAM bei {val}%"),
+            ("disk", state.get("disk", 0), self._alert_thresholds["disk"], "Disk bei {val}%"),
+        ]
+
+        gpu = state.get("gpu")
+        if gpu:
+            checks.append(("gpu_temp", gpu.get("temperature", 0), self._alert_thresholds["gpu_temp"], "GPU Temperatur bei {val}°C"))
+            checks.append(("gpu_load", gpu.get("load", 0), self._alert_thresholds["gpu_load"], "GPU Auslastung bei {val}%"))
+
+        for key, val, threshold, msg_tpl in checks:
+            if val >= threshold:
+                last = self._alert_cooldowns.get(key, 0)
+                if now - last >= self._alert_cooldown_secs:
+                    self._alert_cooldowns[key] = now
+                    alerts.append({
+                        "type": key,
+                        "value": val,
+                        "threshold": threshold,
+                        "message": msg_tpl.format(val=val),
+                        "severity": "critical" if val >= threshold + 5 else "warning",
+                        "timestamp": now,
+                    })
+
+        for alert in alerts:
+            logger.warning(f"ALERT: {alert['message']}")
+            if self._client and self._client.is_connected():
+                self._client.publish(self._alert_topic, json.dumps(alert))
 
     def _get_battery(self) -> dict | None:
         battery = psutil.sensors_battery()
@@ -357,7 +431,9 @@ class NexusAgent:
             time.sleep(self.report_interval)
             if self._running and self._client and self._client.is_connected():
                 try:
-                    self._publish_state(online=True)
+                    state = self._get_system_info()
+                    self._client.publish(self._state_topic, json.dumps(state), retain=True)
+                    self._check_alerts(state)
                 except Exception as e:
                     logger.debug(f"Report failed: {e}")
 

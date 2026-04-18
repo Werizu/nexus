@@ -6,7 +6,8 @@ import SceneEditor from './components/SceneEditor'
 import PiMonitor from './components/PiMonitor'
 import LogViewer from './components/LogViewer'
 import RoomView from './components/RoomView'
-import { useDevices, useScenes, useHealth, usePis, useWebSocket, useLogs, useRooms } from './hooks/useNexus'
+import AlertsPanel from './components/AlertsPanel'
+import { useDevices, useScenes, useHealth, usePis, useWebSocket, useLogs, useRooms, useAlerts } from './hooks/useNexus'
 
 function App() {
   const { devices, loading, refresh, sendCommand } = useDevices()
@@ -17,13 +18,17 @@ function App() {
   const { pis } = usePis()
   const { logs } = useLogs()
   const { rooms } = useRooms()
+  const { alerts, acknowledge, acknowledgeAll, unackedCount, refresh: refreshAlerts } = useAlerts()
   const [activeTab, setActiveTab] = useState('dashboard')
 
   const handleWsMessage = useCallback((data) => {
     if (data.event === 'device_update' || data.event === 'scene_complete') {
       refresh()
     }
-  }, [refresh])
+    if (data.event === 'alert') {
+      refreshAlerts()
+    }
+  }, [refresh, refreshAlerts])
 
   useWebSocket(handleWsMessage)
 
@@ -49,6 +54,7 @@ function App() {
     { id: 'scenes', label: 'Szenen' },
     { id: 'rooms', label: 'Räume' },
     { id: 'pis', label: 'Pi Monitor' },
+    { id: 'alerts', label: `Alerts${unackedCount > 0 ? ` (${unackedCount})` : ''}` },
     { id: 'logs', label: 'Logs' },
   ]
 
@@ -85,6 +91,18 @@ function App() {
             {/* Dashboard */}
             {activeTab === 'dashboard' && (
               <div className="space-y-8">
+                {/* Active Alerts Banner */}
+                {unackedCount > 0 && (
+                  <button
+                    onClick={() => setActiveTab('alerts')}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-yellow-500/40 bg-yellow-500/10 hover:bg-yellow-500/15 transition-all cursor-pointer text-left"
+                  >
+                    <span className="text-yellow-400 text-lg">⚠</span>
+                    <span className="text-sm text-yellow-300 font-medium">{unackedCount} unbestätigte Alert{unackedCount > 1 ? 's' : ''}</span>
+                    <span className="text-xs text-gray-500 ml-auto">Anzeigen →</span>
+                  </button>
+                )}
+
                 {/* Quick Scenes */}
                 <section>
                   <h2 className="text-lg font-semibold text-white mb-4">Szenen</h2>
@@ -185,6 +203,11 @@ function App() {
                   <p className="text-gray-500 text-sm">Keine Pis gefunden</p>
                 )}
               </div>
+            )}
+
+            {/* Alerts Tab */}
+            {activeTab === 'alerts' && (
+              <AlertsPanel alerts={alerts} onAcknowledge={acknowledge} onAcknowledgeAll={acknowledgeAll} />
             )}
 
             {/* Logs Tab */}

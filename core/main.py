@@ -89,8 +89,18 @@ def _setup_agent_mqtt():
             device_id = parts[2]
             pc_plugin.handle_agent_response(device_id, data)
 
+    async def on_agent_alert(topic: str, data: dict):
+        parts = topic.split("/")
+        if len(parts) >= 4:
+            device_id = parts[2]
+            await state_store.add_alert(device_id, data)
+            await state_store.add_log("warning", data.get("message", "Alert"), device=device_id, data=data)
+            await ws_manager.broadcast({"event": "alert", "device_id": device_id, "alert": data})
+            logger.warning(f"Alert from {device_id}: {data.get('message')}")
+
     mqtt_client.subscribe("nexus/agent/+/state", on_agent_state)
     mqtt_client.subscribe("nexus/agent/+/response", on_agent_response)
+    mqtt_client.subscribe("nexus/agent/+/alert", on_agent_alert)
     logger.info("Agent MQTT handlers registered")
 
 
@@ -458,6 +468,24 @@ async def jarvis_command(body: dict):
     command_text = body.get("text", "")
     # Parse command and route to appropriate action
     return {"status": "ok", "received": command_text}
+
+
+# ─── Alerts ──────────────────────────────────────────────
+@app.get("/api/v1/alerts", dependencies=[Depends(verify_auth)])
+async def list_alerts(device: str | None = None, limit: int = 50, unacked: bool = False):
+    return await state_store.get_alerts(device_id=device, limit=limit, unacked_only=unacked)
+
+
+@app.post("/api/v1/alerts/{alert_id}/ack", dependencies=[Depends(verify_auth)])
+async def ack_alert(alert_id: int):
+    await state_store.acknowledge_alert(alert_id)
+    return {"status": "ok"}
+
+
+@app.post("/api/v1/alerts/ack-all", dependencies=[Depends(verify_auth)])
+async def ack_all_alerts():
+    await state_store.acknowledge_all_alerts()
+    return {"status": "ok"}
 
 
 # ─── Logs ────────────────────────────────────────────────
