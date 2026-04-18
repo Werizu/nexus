@@ -60,9 +60,3 @@ actions:
     device: main_mac
     host: "192.168.178.202"
     user: "marlon"
-
-  # 8. Mac: Terminal öffnen
-  - action: pc.open_app
-    device: main_mac
-    app: "Terminal"
-    args: []

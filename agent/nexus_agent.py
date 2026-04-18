@@ -325,8 +325,16 @@ class NexusAgent:
         if not program:
             raise ValueError("No program specified")
         try:
-            cmd = [program] + args
-            subprocess.Popen(cmd, shell=True)
+            import uuid
+            task_name = f"NexusLaunch_{uuid.uuid4().hex[:8]}"
+            cmd_line = program if not args else f'{program} {" ".join(args)}'
+            subprocess.run(
+                f'schtasks /create /tn "{task_name}" /tr "{cmd_line}" /sc once /st 00:00 /f /IT /rl highest',
+                shell=True, capture_output=True,
+            )
+            subprocess.run(f'schtasks /run /tn "{task_name}"', shell=True, capture_output=True)
+            time.sleep(1)
+            subprocess.run(f'schtasks /delete /tn "{task_name}" /f', shell=True, capture_output=True)
             return f"Launched: {program}"
         except Exception as e:
             raise RuntimeError(f"Failed to launch {program}: {e}")

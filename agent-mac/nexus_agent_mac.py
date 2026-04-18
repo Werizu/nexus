@@ -297,13 +297,15 @@ class NexusMacAgent:
         subprocess.Popen(["open", f"rdp://full%20address=s:{host}"])
         return f"RDP connecting to {host}"
 
-    def _ssh_terminal(self, host: str, user: str) -> str:
+    def _ssh_terminal(self, host: str, user: str, key: str = "") -> str:
         if not host:
             raise ValueError("No host specified")
+        key_path = key or "~/.ssh/pi_manager_rsa"
+        ssh_cmd = f"ssh -i {key_path} -o StrictHostKeyChecking=no {user}@{host}"
         script = f'''
         tell application "Terminal"
             activate
-            do script "ssh {user}@{host}"
+            do script "{ssh_cmd}"
         end tell
         '''
         subprocess.Popen(["osascript", "-e", script])
