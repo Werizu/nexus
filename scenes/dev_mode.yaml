@@ -39,7 +39,11 @@ actions:
     wait_until_online: true
     timeout: 90
 
-  # 5. Mac: RDP zum PC öffnen
+  # 5. Warten bis RDP bereit ist
+  - action: wait
+    seconds: 15
+
+  # 6. Mac: RDP zum PC öffnen
   - action: pc.rdp_connect
     device: main_mac
     host: "192.168.178.43"
