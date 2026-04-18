@@ -114,7 +114,6 @@ class NexusMacAgent:
     def _on_connect(self, client, userdata, flags, reason_code, properties=None):
         logger.info(f"Connected to MQTT broker ({reason_code})")
         client.subscribe(self._cmd_topic)
-        client.subscribe(f"{self._cmd_topic}/#")
         self._publish_state(online=True)
 
     def _on_disconnect(self, client, userdata, flags, reason_code, properties=None):
