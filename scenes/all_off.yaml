@@ -1,0 +1,31 @@
+name: all_off
+display_name: "Alles aus"
+icon: power-off
+color: "#E74C3C"
+
+triggers:
+  - type: alexa_phrase
+    phrases:
+      - "alles aus"
+      - "alles ausschalten"
+  - type: api
+    endpoint: /scenes/all_off
+
+actions:
+  - action: light.off
+    device: light_1
+
+  - action: light.off
+    device: light_2
+
+  - action: light.off
+    device: light_3
+
+  - action: light.off
+    device: light_4
+
+  - action: plug.off
+    device: plug_pc
+
+  - action: plug.off
+    device: plug_tv

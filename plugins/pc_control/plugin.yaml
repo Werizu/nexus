@@ -1,0 +1,17 @@
+name: pc_control
+version: 1.0.0
+device_type: computer
+mqtt_topics:
+  wol: "nexus/pc/{name}/wol"
+  command: "nexus/pc/{name}/command"
+  state: "nexus/pc/{name}/state"
+capabilities:
+  - wake_on_lan
+  - ssh_command
+  - status_check
+  - shutdown
+config_schema:
+  mac_address: string
+  ip: string
+  ssh_user: string
+  vnc_port: integer

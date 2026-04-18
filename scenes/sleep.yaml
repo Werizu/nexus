@@ -1,0 +1,32 @@
+name: sleep
+display_name: "Gute Nacht"
+icon: moon
+color: "#2C3E50"
+
+triggers:
+  - type: alexa_phrase
+    phrases:
+      - "Gute Nacht"
+      - "Schlaf-Modus"
+  - type: schedule
+    time: "23:00"
+    days: [sun, mon, tue, wed, thu]
+
+actions:
+  - action: light.off
+    device: light_1
+
+  - action: light.off
+    device: light_2
+
+  - action: light.off
+    device: light_3
+
+  - action: light.off
+    device: light_4
+
+  - action: plug.off
+    device: plug_pc
+
+  - action: plug.off
+    device: plug_tv

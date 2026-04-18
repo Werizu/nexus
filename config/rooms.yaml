@@ -1,0 +1,22 @@
+rooms:
+  office:
+    name: "Büro"
+    icon: "monitor"
+    devices:
+      - main_pc
+      - plug_pc
+
+  living_room:
+    name: "Wohnzimmer"
+    icon: "sofa"
+    devices:
+      - light_1
+      - light_2
+      - light_3
+      - light_4
+      - plug_tv
+
+  bedroom:
+    name: "Schlafzimmer"
+    icon: "bed"
+    devices: []

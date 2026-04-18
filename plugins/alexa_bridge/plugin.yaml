@@ -1,0 +1,9 @@
+name: alexa_bridge
+version: 1.0.0
+device_type: assistant
+mqtt_topics:
+  command: "nexus/alexa/command"
+capabilities:
+  - scene_trigger
+  - device_control
+  - status_query

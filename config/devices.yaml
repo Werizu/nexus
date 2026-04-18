@@ -1,0 +1,85 @@
+# NEXUS Device Registry
+# All devices registered here are auto-discovered by their plugins
+
+devices:
+  computers:
+    - id: main_pc
+      name: "Desktop PC"
+      plugin: pc_control
+      room: office
+      mac_address: "2C:F0:5D:99:03:63"
+      ip: 192.168.178.43
+      ssh_user: marlon
+      ssh_key: "~/.pi-manager/keys/id_rsa"
+      vnc_port: 5900
+      os: windows
+      check_port: 3389
+
+  pis:
+    - id: brain
+      name: "NEXUS Brain"
+      plugin: pi_manager
+      hostname: 192.168.178.202
+      ssh_user: marlon
+      ssh_key: "~/.pi-manager/keys/id_rsa"
+      role: primary
+
+    - id: server1
+      name: "Server 1"
+      plugin: pi_manager
+      hostname: 192.168.178.201
+      ssh_user: marlon
+      ssh_key: "~/.pi-manager/keys/id_rsa"
+      role: secondary
+
+    - id: server3
+      name: "Server 3"
+      plugin: pi_manager
+      hostname: 192.168.178.203
+      ssh_user: marlon
+      ssh_key: "~/.pi-manager/keys/id_rsa"
+      role: secondary
+
+  lights:
+    - id: light_1
+      name: "Light 1"
+      plugin: hue_lights
+      room: living_room
+      bridge_ip: 192.168.178.48
+      hue_id: "3"
+
+    - id: light_2
+      name: "Light 2"
+      plugin: hue_lights
+      room: living_room
+      bridge_ip: 192.168.178.48
+      hue_id: "4"
+
+    - id: light_3
+      name: "Light 3"
+      plugin: hue_lights
+      room: living_room
+      bridge_ip: 192.168.178.48
+      hue_id: "5"
+
+    - id: light_4
+      name: "Light 4"
+      plugin: hue_lights
+      room: living_room
+      bridge_ip: 192.168.178.48
+      hue_id: "6"
+
+  plugs:
+    - id: plug_pc
+      name: "PC Steckdose"
+      plugin: hue_lights
+      room: office
+      bridge_ip: 192.168.178.48
+      hue_id: "8"
+
+    - id: plug_tv
+      name: "Fernseher Steckdose"
+      plugin: hue_lights
+      room: living_room
+      bridge_ip: 192.168.178.48
+      hue_id: "9"

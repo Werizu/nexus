@@ -1,0 +1,12 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+pydantic==2.9.0
+pydantic-settings==2.5.0
+aiomqtt==2.3.0
+aiosqlite==0.20.0
+httpx==0.27.0
+pyyaml==6.0.2
+python-socketio==5.11.0
+jinja2==3.1.4
+wakeonlan==3.1.0
+paramiko==3.4.0

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import Header from './components/Header'
 import DeviceCard from './components/DeviceCard'
 import SceneCard from './components/SceneCard'
+import SceneEditor from './components/SceneEditor'
 import PiMonitor from './components/PiMonitor'
 import LogViewer from './components/LogViewer'
 import RoomView from './components/RoomView'
@@ -9,7 +10,9 @@ import { useDevices, useScenes, useHealth, usePis, useWebSocket, useLogs, useRoo
 
 function App() {
   const { devices, loading, refresh, sendCommand } = useDevices()
-  const { scenes, trigger } = useScenes()
+  const { scenes, trigger, saveScene, deleteScene } = useScenes()
+  const [editorScene, setEditorScene] = useState(null)
+  const [showEditor, setShowEditor] = useState(false)
   const health = useHealth()
   const { pis } = usePis()
   const { logs } = useLogs()
@@ -87,7 +90,13 @@ function App() {
                   <h2 className="text-lg font-semibold text-white mb-4">Szenen</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {scenes.map((scene) => (
-                      <SceneCard key={scene.name} scene={scene} onTrigger={trigger} />
+                      <SceneCard
+                        key={scene.name}
+                        scene={scene}
+                        onTrigger={trigger}
+                        onEdit={(s) => { setEditorScene(s); setShowEditor(true) }}
+                        onDelete={(name) => { if (confirm(`Szene "${name}" wirklich löschen?`)) deleteScene(name) }}
+                      />
                     ))}
                   </div>
                 </section>
@@ -137,10 +146,27 @@ function App() {
 
             {/* Scenes Tab */}
             {activeTab === 'scenes' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {scenes.map((scene) => (
-                  <SceneCard key={scene.name} scene={scene} onTrigger={trigger} />
-                ))}
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-semibold text-white">Szenen</h2>
+                  <button
+                    onClick={() => { setEditorScene(null); setShowEditor(true) }}
+                    className="px-3 py-1.5 text-sm bg-[#00D4FF] text-black font-medium rounded-lg hover:bg-[#00b8d4] transition-colors cursor-pointer"
+                  >
+                    + Neue Szene
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {scenes.map((scene) => (
+                    <SceneCard
+                      key={scene.name}
+                      scene={scene}
+                      onTrigger={trigger}
+                      onEdit={(s) => { setEditorScene(s); setShowEditor(true) }}
+                      onDelete={(name) => { if (confirm(`Szene "${name}" wirklich löschen?`)) deleteScene(name) }}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 
@@ -168,6 +194,14 @@ function App() {
           </>
         )}
       </main>
+
+      {showEditor && (
+        <SceneEditor
+          scene={editorScene}
+          onSave={saveScene}
+          onClose={() => setShowEditor(false)}
+        />
+      )}
     </div>
   )
 }

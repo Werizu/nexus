@@ -1,0 +1,54 @@
+name: morning
+display_name: "Guten Morgen"
+icon: sunrise
+color: "#FFB347"
+
+triggers:
+  - type: alexa_phrase
+    phrases:
+      - "Guten Morgen"
+  - type: schedule
+    time: "07:00"
+    days: [mon, tue, wed, thu, fri]
+
+actions:
+  - action: light.brightness
+    device: light_1
+    level: 30
+
+  - action: light.brightness
+    device: light_2
+    level: 30
+
+  - action: light.brightness
+    device: light_3
+    level: 30
+
+  - action: light.brightness
+    device: light_4
+    level: 30
+
+  - action: wait
+    seconds: 5
+
+  - action: light.brightness
+    device: light_1
+    level: 100
+
+  - action: light.brightness
+    device: light_2
+    level: 100
+
+  - action: light.brightness
+    device: light_3
+    level: 100
+
+  - action: light.brightness
+    device: light_4
+    level: 100
+
+  - action: plug.on
+    device: plug_pc
+
+  - action: pc.wake
+    device: main_pc

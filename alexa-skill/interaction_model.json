@@ -1,0 +1,128 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "nexus",
+      "intents": [
+        {
+          "name": "TriggerSceneIntent",
+          "slots": [
+            {
+              "name": "scene",
+              "type": "SCENE_NAMES"
+            }
+          ],
+          "samples": [
+            "starte {scene}",
+            "{scene}",
+            "{scene} aktivieren",
+            "mach {scene} an",
+            "starte szene {scene}",
+            "aktiviere {scene}"
+          ]
+        },
+        {
+          "name": "DeviceOnIntent",
+          "slots": [
+            {
+              "name": "device",
+              "type": "DEVICE_NAMES"
+            }
+          ],
+          "samples": [
+            "schalte {device} an",
+            "mach {device} an",
+            "{device} einschalten",
+            "{device} an"
+          ]
+        },
+        {
+          "name": "DeviceOffIntent",
+          "slots": [
+            {
+              "name": "device",
+              "type": "DEVICE_NAMES"
+            }
+          ],
+          "samples": [
+            "schalte {device} aus",
+            "mach {device} aus",
+            "{device} ausschalten",
+            "{device} aus"
+          ]
+        },
+        {
+          "name": "WakeComputerIntent",
+          "samples": [
+            "pc hochfahren",
+            "computer starten",
+            "rechner hochfahren",
+            "pc anmachen",
+            "computer aufwecken"
+          ]
+        },
+        {
+          "name": "StatusIntent",
+          "samples": [
+            "wie ist der status",
+            "system status",
+            "was läuft gerade",
+            "welche geräte sind an",
+            "pi status"
+          ]
+        },
+        {
+          "name": "EnergyIntent",
+          "samples": [
+            "wie viel strom heute",
+            "energieverbrauch",
+            "stromverbrauch",
+            "wie viel watt"
+          ]
+        },
+        {
+          "name": "AllOffIntent",
+          "samples": [
+            "alles aus",
+            "alles ausschalten",
+            "mach alles aus",
+            "schalte alles aus"
+          ]
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        }
+      ],
+      "types": [
+        {
+          "name": "SCENE_NAMES",
+          "values": [
+            { "name": { "value": "programmier modus", "synonyms": ["programmieren", "dev mode", "wir programmieren was"] } },
+            { "name": { "value": "guten morgen", "synonyms": ["morgen routine", "morgen"] } },
+            { "name": { "value": "filmabend", "synonyms": ["film abend", "kino", "movie mode"] } },
+            { "name": { "value": "gute nacht", "synonyms": ["schlaf modus", "schlafen"] } },
+            { "name": { "value": "tschüss", "synonyms": ["ich gehe", "verlasse wohnung"] } },
+            { "name": { "value": "alles aus", "synonyms": ["alles ausschalten"] } }
+          ]
+        },
+        {
+          "name": "DEVICE_NAMES",
+          "values": [
+            { "name": { "value": "desktop pc", "synonyms": ["pc", "computer", "rechner"] } },
+            { "name": { "value": "schreibtisch licht", "synonyms": ["schreibtischlampe", "büro licht"] } },
+            { "name": { "value": "monitor steckerleiste", "synonyms": ["monitor strip", "monitor steckdose"] } },
+            { "name": { "value": "wohnzimmer strip", "synonyms": ["led strip", "wohnzimmer licht"] } }
+          ]
+        }
+      ]
+    }
+  }
+}

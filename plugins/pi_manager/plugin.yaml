@@ -1,0 +1,14 @@
+name: pi_manager
+version: 1.0.0
+device_type: pi
+mqtt_topics:
+  status: "nexus/pi/{hostname}/status"
+  command: "nexus/pi/{hostname}/command"
+capabilities:
+  - status_check
+  - ssh_command
+  - vnc_control
+  - system_metrics
+config_schema:
+  hostname: string
+  role: string

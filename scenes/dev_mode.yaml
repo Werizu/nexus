@@ -1,0 +1,42 @@
+name: dev_mode
+display_name: "Programmier-Modus"
+icon: code
+color: "#00D4FF"
+
+triggers:
+  - type: alexa_phrase
+    phrases:
+      - "Programmier-Modus"
+      - "wir programmieren was"
+  - type: api
+    endpoint: /scenes/dev_mode
+
+conditions:
+  - time_between: ["07:00", "02:00"]
+
+actions:
+  - action: light.focus
+    device: light_1
+
+  - action: light.focus
+    device: light_2
+
+  - action: light.focus
+    device: light_3
+
+  - action: light.focus
+    device: light_4
+
+  - action: plug.on
+    device: plug_pc
+
+  - action: pc.wake
+    device: main_pc
+    wait_until_online: true
+    timeout: 60
+
+  - action: pi.start_vnc
+    device: brain
+
+  - action: jarvis.speak
+    text: "Alles bereit. Lass uns bauen."

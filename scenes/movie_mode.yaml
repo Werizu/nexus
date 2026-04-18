@@ -1,0 +1,30 @@
+name: movie_mode
+display_name: "Film-Abend"
+icon: film
+color: "#E74C3C"
+
+triggers:
+  - type: alexa_phrase
+    phrases:
+      - "Filmabend"
+      - "Film-Abend"
+
+actions:
+  - action: light.brightness
+    device: light_1
+    level: 10
+
+  - action: light.brightness
+    device: light_2
+    level: 10
+
+  - action: light.brightness
+    device: light_3
+    level: 10
+
+  - action: light.brightness
+    device: light_4
+    level: 10
+
+  - action: plug.on
+    device: plug_tv

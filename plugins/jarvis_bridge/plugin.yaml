@@ -1,0 +1,10 @@
+name: jarvis_bridge
+version: 1.0.0
+device_type: assistant
+mqtt_topics:
+  speak: "nexus/jarvis/speak"
+  command: "nexus/jarvis/command"
+capabilities:
+  - speak
+  - command
+  - context_query

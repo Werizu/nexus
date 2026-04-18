@@ -1,0 +1,13 @@
+name: ikea_lights
+version: 1.0.0
+device_type: light
+mqtt_topics:
+  command: "nexus/lights/{room}/{id}/set"
+  state: "nexus/lights/{room}/{id}/state"
+capabilities:
+  - on_off
+  - brightness
+  - color_temp
+config_schema:
+  gateway_ip: string
+  security_code: string

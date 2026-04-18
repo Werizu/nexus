@@ -42,15 +42,40 @@ export function useDevices() {
 export function useScenes() {
   const [scenes, setScenes] = useState([])
 
-  useEffect(() => {
-    api('/scenes').then(setScenes).catch(console.error)
+  const refresh = useCallback(async () => {
+    try {
+      setScenes(await api('/scenes'))
+    } catch (e) {
+      console.error('Failed to load scenes:', e)
+    }
   }, [])
+
+  useEffect(() => { refresh() }, [refresh])
 
   const trigger = useCallback(async (sceneName) => {
     return api(`/scenes/${sceneName}/trigger`, { method: 'POST', body: '{}' })
   }, [])
 
-  return { scenes, trigger }
+  const saveScene = useCallback(async (sceneData, originalName) => {
+    if (originalName && originalName !== sceneData.name) {
+      await api(`/scenes/${originalName}`, { method: 'DELETE' })
+    }
+    const method = originalName ? 'PUT' : 'POST'
+    const path = originalName && originalName === sceneData.name
+      ? `/scenes/${sceneData.name}`
+      : '/scenes'
+    const result = await api(path, { method, body: JSON.stringify(sceneData) })
+    await refresh()
+    return result
+  }, [refresh])
+
+  const deleteScene = useCallback(async (sceneName) => {
+    const result = await api(`/scenes/${sceneName}`, { method: 'DELETE' })
+    await refresh()
+    return result
+  }, [refresh])
+
+  return { scenes, trigger, saveScene, deleteScene, refresh }
 }
 
 export function useHealth() {

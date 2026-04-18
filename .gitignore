@@ -1,0 +1,16 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+config/secrets.yaml
+*.db
+*.sqlite
+node_modules/
+web/dist/
+.DS_Store
+data/
+*.log
+pi_manager_rsa
+*.pem
+*.key

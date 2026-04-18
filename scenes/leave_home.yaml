@@ -1,0 +1,29 @@
+name: leave_home
+display_name: "Tschüss"
+icon: door-open
+color: "#95A5A6"
+
+triggers:
+  - type: alexa_phrase
+    phrases:
+      - "Ich gehe"
+      - "Tschüss"
+
+actions:
+  - action: light.off
+    device: light_1
+
+  - action: light.off
+    device: light_2
+
+  - action: light.off
+    device: light_3
+
+  - action: light.off
+    device: light_4
+
+  - action: plug.off
+    device: plug_pc
+
+  - action: plug.off
+    device: plug_tv

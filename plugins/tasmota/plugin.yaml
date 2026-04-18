@@ -1,0 +1,16 @@
+name: tasmota
+version: 1.0.0
+device_type: plug
+mqtt_topics:
+  command: "nexus/plugs/{name}/set"
+  state: "nexus/plugs/{name}/state"
+  power: "nexus/plugs/{name}/power"
+capabilities:
+  - on_off
+  - energy_monitoring
+  - brightness
+  - color_rgb
+config_schema:
+  ip: string
+  type: string  # 'plug' | 'rgbw' | 'dimmer'
+  energy_monitoring: boolean
