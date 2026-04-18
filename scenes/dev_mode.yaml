@@ -15,28 +15,41 @@ conditions:
   - time_between: ["07:00", "02:00"]
 
 actions:
+  # 1. Lichter auf Focus-Mode (kühles Weißlicht, 70%)
   - action: light.focus
     device: light_1
-
   - action: light.focus
     device: light_2
-
   - action: light.focus
     device: light_3
-
   - action: light.focus
     device: light_4
 
+  # 2. PC-Steckdose einschalten (Monitor, Peripherie)
   - action: plug.on
     device: plug_pc
 
+  # 3. Kurz warten, dann PC aufwecken
+  - action: wait
+    seconds: 2
+
+  # 4. Wake-on-LAN → warten bis Agent meldet "online"
   - action: pc.wake
     device: main_pc
     wait_until_online: true
-    timeout: 60
+    timeout: 90
 
-  - action: pi.start_vnc
-    device: brain
+  # 5. IDE und Terminals starten
+  - action: pc.launch
+    device: main_pc
+    program: "code"
+    args: []
 
-  - action: jarvis.speak
-    text: "Alles bereit. Lass uns bauen."
+  - action: wait
+    seconds: 3
+
+  # 6. Windows Terminal öffnen
+  - action: pc.launch
+    device: main_pc
+    program: "wt"
+    args: []
