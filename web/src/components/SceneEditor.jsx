@@ -4,18 +4,44 @@ import { X, Plus, Trash2, GripVertical } from 'lucide-react'
 const ACTION_TYPES = [
   { value: 'light.on', label: 'Licht ein' },
   { value: 'light.off', label: 'Licht aus' },
-  { value: 'light.brightness', label: 'Helligkeit', hasLevel: true },
-  { value: 'light.color_temp', label: 'Farbtemperatur', hasLevel: true },
+  { value: 'light.brightness', label: 'Helligkeit', params: ['level'] },
+  { value: 'light.color_temp', label: 'Farbtemperatur', params: ['level'] },
   { value: 'light.focus', label: 'Fokus-Modus' },
   { value: 'light.relax', label: 'Relax-Modus' },
   { value: 'plug.on', label: 'Steckdose ein' },
   { value: 'plug.off', label: 'Steckdose aus' },
-  { value: 'pc.wake', label: 'PC aufwecken' },
+  { value: 'pc.wake', label: 'PC aufwecken (WOL)', params: ['wait_until_online', 'timeout'] },
   { value: 'pc.shutdown', label: 'PC herunterfahren' },
   { value: 'pc.restart', label: 'PC neustarten' },
-  { value: 'wait', label: 'Warten', hasSeconds: true },
-  { value: 'jarvis.speak', label: 'Jarvis Sprache', hasText: true },
+  { value: 'pc.sleep', label: 'PC Ruhezustand' },
+  { value: 'pc.lock', label: 'PC sperren' },
+  { value: 'pc.rdp_connect', label: 'Remote Desktop (RDP)', params: ['host', 'username', 'password'] },
+  { value: 'pc.open_url', label: 'URL öffnen', params: ['url'] },
+  { value: 'pc.open_app', label: 'App öffnen', params: ['app'] },
+  { value: 'pc.launch', label: 'Programm starten', params: ['program'] },
+  { value: 'pc.volume', label: 'Lautstärke', params: ['level'] },
+  { value: 'pc.notify', label: 'Benachrichtigung', params: ['title', 'message'] },
+  { value: 'pc.run', label: 'Befehl ausführen', params: ['cmd'] },
+  { value: 'wait', label: 'Warten', params: ['seconds'], noDevice: true },
+  { value: 'jarvis.speak', label: 'Jarvis Sprache', params: ['text'], noDevice: true },
 ]
+
+const PARAM_CONFIG = {
+  level: { label: 'Level', type: 'range', min: 1, max: 100, default: 50, suffix: '%' },
+  seconds: { label: 'Sekunden', type: 'number', min: 1, max: 300, default: 1 },
+  timeout: { label: 'Timeout (Sek.)', type: 'number', min: 10, max: 300, default: 90 },
+  wait_until_online: { label: 'Warten bis online', type: 'checkbox', default: false },
+  host: { label: 'Host / IP', type: 'text', placeholder: 'z.B. 192.168.178.43' },
+  username: { label: 'Benutzername', type: 'text', placeholder: 'z.B. user@email.com' },
+  url: { label: 'URL', type: 'text', placeholder: 'z.B. http://192.168.178.202' },
+  app: { label: 'App-Name', type: 'text', placeholder: 'z.B. Safari' },
+  program: { label: 'Programm-Pfad', type: 'text', placeholder: 'z.B. notepad.exe' },
+  password: { label: 'Passwort', type: 'password', placeholder: 'Passwort' },
+  title: { label: 'Titel', type: 'text', placeholder: 'Benachrichtigung' },
+  message: { label: 'Nachricht', type: 'text', placeholder: 'Text...' },
+  text: { label: 'Text', type: 'text', placeholder: 'Text zum Sprechen...' },
+  cmd: { label: 'Befehl', type: 'text', placeholder: 'z.B. echo hello' },
+}
 
 const DEVICES = [
   { value: 'light_1', label: 'Light 1', category: 'lights' },
@@ -25,6 +51,7 @@ const DEVICES = [
   { value: 'plug_pc', label: 'PC Steckdose', category: 'plugs' },
   { value: 'plug_tv', label: 'Fernseher Steckdose', category: 'plugs' },
   { value: 'main_pc', label: 'Desktop PC', category: 'computers' },
+  { value: 'main_mac', label: 'MacBook', category: 'computers' },
   { value: 'brain', label: 'NEXUS Brain', category: 'pis' },
   { value: 'server1', label: 'Server 1', category: 'pis' },
   { value: 'server3', label: 'Server 3', category: 'pis' },
@@ -51,7 +78,8 @@ const ICONS = [
 const EMPTY_ACTION = { action: 'light.on', device: 'light_1' }
 
 function actionNeedsDevice(actionType) {
-  return actionType !== 'wait' && actionType !== 'jarvis.speak'
+  const meta = ACTION_TYPES.find(a => a.value === actionType)
+  return !meta?.noDevice
 }
 
 export default function SceneEditor({ scene, onSave, onClose }) {
@@ -109,9 +137,20 @@ export default function SceneEditor({ scene, onSave, onClose }) {
     const cleanActions = actions.map(a => {
       const clean = { action: a.action }
       if (actionNeedsDevice(a.action)) clean.device = a.device
-      if (a.action === 'light.brightness' || a.action === 'light.color_temp') clean.level = Number(a.level) || 50
-      if (a.action === 'wait') clean.seconds = Number(a.seconds) || 1
-      if (a.action === 'jarvis.speak') clean.text = a.text || ''
+      const meta = ACTION_TYPES.find(t => t.value === a.action)
+      if (meta?.params) {
+        for (const param of meta.params) {
+          const cfg = PARAM_CONFIG[param]
+          if (!cfg) continue
+          if (cfg.type === 'number' || cfg.type === 'range') {
+            clean[param] = Number(a[param]) || cfg.default || 0
+          } else if (cfg.type === 'checkbox') {
+            clean[param] = !!a[param]
+          } else if (a[param]) {
+            clean[param] = a[param]
+          }
+        }
+      }
       return clean
     })
 
@@ -252,46 +291,60 @@ export default function SceneEditor({ scene, onSave, onClose }) {
                       </button>
                     </div>
 
-                    {meta.hasLevel && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Level:</span>
-                        <input
-                          type="range"
-                          min="1"
-                          max="100"
-                          value={action.level || 50}
-                          onChange={e => updateAction(i, 'level', e.target.value)}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-gray-400 w-8 text-right">{action.level || 50}%</span>
-                      </div>
-                    )}
-
-                    {meta.hasSeconds && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Sekunden:</span>
-                        <input
-                          type="number"
-                          min="1"
-                          max="300"
-                          value={action.seconds || 1}
-                          onChange={e => updateAction(i, 'seconds', e.target.value)}
-                          className="w-20 bg-[#12121a] border border-[#2a2a3e] rounded px-2 py-1 text-xs text-white focus:outline-none"
-                        />
-                      </div>
-                    )}
-
-                    {meta.hasText && (
-                      <div className="mt-2">
-                        <input
-                          type="text"
-                          value={action.text || ''}
-                          onChange={e => updateAction(i, 'text', e.target.value)}
-                          placeholder="Text zum Sprechen..."
-                          className="w-full bg-[#12121a] border border-[#2a2a3e] rounded px-2 py-1.5 text-xs text-white focus:outline-none"
-                        />
-                      </div>
-                    )}
+                    {meta.params?.map(param => {
+                      const cfg = PARAM_CONFIG[param]
+                      if (!cfg) return null
+                      if (cfg.type === 'range') return (
+                        <div key={param} className="mt-2 flex items-center gap-2">
+                          <span className="text-xs text-gray-500">{cfg.label}:</span>
+                          <input
+                            type="range"
+                            min={cfg.min}
+                            max={cfg.max}
+                            value={action[param] || cfg.default}
+                            onChange={e => updateAction(i, param, e.target.value)}
+                            className="flex-1"
+                          />
+                          <span className="text-xs text-gray-400 w-8 text-right">{action[param] || cfg.default}{cfg.suffix || ''}</span>
+                        </div>
+                      )
+                      if (cfg.type === 'number') return (
+                        <div key={param} className="mt-2 flex items-center gap-2">
+                          <span className="text-xs text-gray-500">{cfg.label}:</span>
+                          <input
+                            type="number"
+                            min={cfg.min}
+                            max={cfg.max}
+                            value={action[param] || cfg.default}
+                            onChange={e => updateAction(i, param, e.target.value)}
+                            className="w-24 bg-[#12121a] border border-[#2a2a3e] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                          />
+                        </div>
+                      )
+                      if (cfg.type === 'checkbox') return (
+                        <div key={param} className="mt-2 flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!action[param]}
+                            onChange={e => updateAction(i, param, e.target.checked)}
+                            className="rounded"
+                          />
+                          <span className="text-xs text-gray-400">{cfg.label}</span>
+                        </div>
+                      )
+                      return (
+                        <div key={param} className="mt-2">
+                          <span className="text-xs text-gray-500">{cfg.label}:</span>
+                          <input
+                            type={cfg.type === 'password' ? 'password' : 'text'}
+                            value={action[param] || ''}
+                            onChange={e => updateAction(i, param, e.target.value)}
+                            placeholder={cfg.placeholder || ''}
+                            className="w-full mt-1 bg-[#12121a] border border-[#2a2a3e] rounded px-2 py-1.5 text-xs text-white focus:outline-none"
+                          />
+                        </div>
+                      )
+                    })}
                   </div>
                 )
               })}

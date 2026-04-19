@@ -159,7 +159,7 @@ class NexusMacAgent:
             case "open_url":
                 return self._open_url(params.get("url", ""))
             case "rdp_connect":
-                return self._rdp_connect(params.get("host", ""))
+                return self._rdp_connect(params.get("host", ""), params.get("username", ""), params.get("password", ""))
             case "ssh_terminal":
                 return self._ssh_terminal(params.get("host", ""), params.get("user", "marlon"))
             case "notify":
@@ -290,16 +290,15 @@ class NexusMacAgent:
         subprocess.Popen(["open", url])
         return f"Opened URL: {url}"
 
-    def _rdp_connect(self, host: str) -> str:
+    def _rdp_connect(self, host: str, username: str = "", password: str = "") -> str:
         if not host:
             raise ValueError("No host specified")
-        rdp_file = Path(__file__).parent / "connect.rdp"
-        rdp_file.write_text(
-            f"full address:s:{host}\n"
-            f"prompt for credentials:i:0\n"
-            f"administrative session:i:1\n"
-        )
-        subprocess.Popen(["open", str(rdp_file)])
+        cmd = ["/opt/homebrew/bin/sdl-freerdp", f"/v:{host}", "/cert:ignore", "/dynamic-resolution"]
+        if username:
+            cmd.append(f"/u:{username}")
+        if password:
+            cmd.append(f"/p:{password}")
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return f"RDP connecting to {host}"
 
     def _ssh_terminal(self, host: str, user: str, key: str = "") -> str:

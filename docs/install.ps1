@@ -80,6 +80,7 @@ if ($svc) {
     Start-Sleep 2
 }
 python "$InstallDir\nexus_service.py" install 2>&1 | Out-Null
+Set-Service -Name "NexusAgent" -StartupType Automatic
 python "$InstallDir\nexus_service.py" start 2>&1 | Out-Null
 
 # Verify

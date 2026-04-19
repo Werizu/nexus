@@ -42,6 +42,16 @@ class SceneEngine:
 
         logger.info(f"Loaded {len(self.scenes)} scenes")
 
+    @staticmethod
+    def _mask_actions(actions: list) -> list:
+        masked = []
+        for a in actions:
+            ac = dict(a)
+            if "password" in ac:
+                ac["password"] = "••••••"
+            masked.append(ac)
+        return masked
+
     def list_scenes(self) -> list[dict]:
         return [
             {
@@ -50,18 +60,32 @@ class SceneEngine:
                 "icon": s.get("icon", ""),
                 "color": s.get("color", "#FFFFFF"),
                 "triggers": s.get("triggers", []),
-                "actions": s.get("actions", []),
+                "actions": self._mask_actions(s.get("actions", [])),
             }
             for s in self.scenes.values()
         ]
 
     def get_scene_full(self, name: str) -> dict | None:
-        return self.scenes.get(name)
+        scene = self.scenes.get(name)
+        if not scene:
+            return None
+        result = dict(scene)
+        result["actions"] = self._mask_actions(result.get("actions", []))
+        return result
 
     async def save_scene(self, scene_data: dict) -> dict:
         name = scene_data.get("name", "")
         if not name:
             return {"error": "Scene name is required"}
+
+        existing = self.scenes.get(name, {})
+        old_actions = existing.get("actions", [])
+        for action in scene_data.get("actions", []):
+            if action.get("password") == "••••••":
+                for old in old_actions:
+                    if old.get("action") == action.get("action") and old.get("device") == action.get("device"):
+                        action["password"] = old.get("password", "")
+                        break
 
         scene_file = self._scenes_dir / f"{name}.yaml"
         with open(scene_file, "w") as f:
