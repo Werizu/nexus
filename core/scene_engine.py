@@ -17,10 +17,11 @@ logger = logging.getLogger("nexus.scenes")
 
 
 class SceneEngine:
-    def __init__(self, config: "NexusConfig", plugin_manager: "PluginManager", state_store: "StateStore"):
+    def __init__(self, config: "NexusConfig", plugin_manager: "PluginManager", state_store: "StateStore", ws_manager=None):
         self.config = config
         self.plugin_manager = plugin_manager
         self.state_store = state_store
+        self.ws_manager = ws_manager
         self.scenes: dict[str, dict] = {}
         self._scenes_dir = Path(__file__).parent.parent / config.scenes_dir
 
@@ -123,18 +124,49 @@ class SceneEngine:
         actions = scene.get("actions", [])
         results = []
 
+        # Open scene watch terminal on Mac
+        try:
+            mac_plugin = self.plugin_manager.get_plugin_for_device("main_mac")
+            if mac_plugin and mac_plugin._has_agent("main_mac"):
+                await mac_plugin._send_agent_command("main_mac", "scene_watch", {"scene": scene_name})
+                await asyncio.sleep(1)
+        except Exception:
+            pass
+
         await self.state_store.add_log("info", f"Scene '{scene_name}' started", data={"params": params or {}})
 
         for i, action in enumerate(actions):
+            if self.ws_manager:
+                await self.ws_manager.broadcast({
+                    "event": "scene_step", "scene": scene_name,
+                    "step": i + 1, "action": action.get("action"), "status": "running",
+                })
             try:
                 result = await self._execute_action(action, params or {})
                 results.append({"step": i + 1, "action": action.get("action"), "result": result})
                 logger.info(f"Scene {scene_name} step {i+1}: {action.get('action')} → {result}")
+                if result and "Timeout" in str(result):
+                    if self.ws_manager:
+                        await self.ws_manager.broadcast({
+                            "event": "scene_step", "scene": scene_name,
+                            "step": i + 1, "action": action.get("action"), "status": "failed",
+                        })
+                    logger.warning(f"Scene {scene_name}: aborting remaining steps after timeout")
+                    break
+                if self.ws_manager:
+                    await self.ws_manager.broadcast({
+                        "event": "scene_step", "scene": scene_name,
+                        "step": i + 1, "action": action.get("action"), "status": "completed",
+                    })
             except Exception as e:
                 error = f"Step {i+1} failed: {e}"
                 results.append({"step": i + 1, "action": action.get("action"), "error": str(e)})
                 logger.error(f"Scene {scene_name}: {error}")
-                # Continue with remaining actions unless it's critical
+                if self.ws_manager:
+                    await self.ws_manager.broadcast({
+                        "event": "scene_step", "scene": scene_name,
+                        "step": i + 1, "action": action.get("action"), "status": "failed",
+                    })
 
         await self.state_store.add_log("info", f"Scene '{scene_name}' completed", data={"results": results})
         return {"status": "completed", "steps": results}

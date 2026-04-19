@@ -158,6 +158,8 @@ class NexusMacAgent:
                 return self._open_app(params.get("app", ""), params.get("args", []))
             case "open_url":
                 return self._open_url(params.get("url", ""))
+            case "scene_watch":
+                return self._open_scene_watch(params.get("scene", ""))
             case "rdp_connect":
                 return self._rdp_connect(params.get("host", ""), params.get("username", ""), params.get("password", ""))
             case "ssh_terminal":
@@ -290,10 +292,37 @@ class NexusMacAgent:
         subprocess.Popen(["open", url])
         return f"Opened URL: {url}"
 
+    def _open_scene_watch(self, scene: str) -> str:
+        if not scene:
+            raise ValueError("No scene specified")
+        watch_script = Path(__file__).parent / "scene_watch.py"
+        if not watch_script.exists():
+            raise FileNotFoundError("scene_watch.py not found")
+        python = Path(__file__).parent / "venv" / "bin" / "python"
+        cmd = f"{python} {watch_script} --watch --auto-close {scene}"
+        script = f'''
+        tell application "Terminal"
+            activate
+            set w to do script "{cmd}"
+            repeat
+                delay 2
+                if not busy of w then exit repeat
+            end repeat
+            close w
+        end tell
+        '''
+        subprocess.Popen(["osascript", "-e", script])
+        return f"Scene watch opened for: {scene}"
+
     def _rdp_connect(self, host: str, username: str = "", password: str = "") -> str:
         if not host:
             raise ValueError("No host specified")
-        cmd = ["/opt/homebrew/bin/sdl-freerdp", f"/v:{host}", "/cert:ignore", "/dynamic-resolution"]
+        cmd = [
+            "/opt/homebrew/bin/sdl-freerdp", f"/v:{host}",
+            "/cert:ignore", "/f",
+            "/network:lan",
+            "+fonts", "+window-drag",
+        ]
         if username:
             cmd.append(f"/u:{username}")
         if password:

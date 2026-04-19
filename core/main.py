@@ -23,7 +23,7 @@ state_store = StateStore(config.db_path)
 ws_manager = WebSocketManager()
 mqtt_client = MQTTClient(config, state_store, ws_manager)
 plugin_manager = PluginManager(config, mqtt_client, state_store)
-scene_engine = SceneEngine(config, plugin_manager, state_store)
+scene_engine = SceneEngine(config, plugin_manager, state_store, ws_manager)
 
 
 def verify_auth(request: Request):

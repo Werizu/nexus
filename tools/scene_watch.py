@@ -414,7 +414,7 @@ async def watch_with_polling(display: SceneDisplay, scene_name: str, trigger: bo
     draw(display)
 
 
-async def run(scene_name: str, trigger: bool):
+async def run(scene_name: str, trigger: bool, auto_close: bool = False):
     # Fetch scene definition
     scene = api_get(f"/scenes/{scene_name}")
     if "detail" in scene:
@@ -458,6 +458,12 @@ async def run(scene_name: str, trigger: bool):
         else:
             print(f"{GREEN}\u2713 Fertig{RESET} in {elapsed:.1f}s")
 
+        if auto_close:
+            for i in range(3, 0, -1):
+                sys.stdout.write(f"\r{DIM}Schliesse in {i}...{RESET}")
+                sys.stdout.flush()
+                await asyncio.sleep(1)
+
     finally:
         sys.stdout.write(SHOW_CURSOR)
         sys.stdout.flush()
@@ -479,6 +485,11 @@ def main():
         default=None,
         help="Brain-Host ueberschreiben (z.B. localhost:8000)",
     )
+    parser.add_argument(
+        "--auto-close",
+        action="store_true",
+        help="Terminal nach 3s automatisch schliessen",
+    )
 
     args = parser.parse_args()
 
@@ -491,7 +502,7 @@ def main():
     trigger = not args.watch
 
     try:
-        asyncio.run(run(args.scene, trigger))
+        asyncio.run(run(args.scene, trigger, args.auto_close))
     except KeyboardInterrupt:
         sys.stdout.write(SHOW_CURSOR)
         print(f"\n{DIM}Abgebrochen.{RESET}")

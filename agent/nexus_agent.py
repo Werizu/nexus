@@ -403,7 +403,7 @@ class NexusAgent:
         self._publish_state(online=False)
         time.sleep(0.5)
         if platform.system() == "Windows":
-            os.system("shutdown /s /t 0")
+            os.system("shutdown /s /hybrid /t 0")
         else:
             os.system("sudo shutdown -h now")
 
