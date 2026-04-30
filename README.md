@@ -103,7 +103,7 @@ Tailscale auch auf allen anderen Geräten installieren (PCs, MacBooks, Handys), 
 
 > **Ohne Tailscale** funktioniert alles nur im lokalen Netzwerk — Agents können dann die lokale IP des Brain nutzen.
 
-### 3. Dashboard
+### 3. Dashboard & Account-Einrichtung
 
 Dashboard im Browser öffnen: `http://<tailscale-ip>` (oder `http://<lokale-ip>` ohne Tailscale).
 
@@ -114,9 +114,17 @@ Beim ersten Start wird ein Admin-Account erstellt:
 
 **Passwort sofort ändern** über das Zahnrad-Icon oben rechts.
 
+> **Wichtig:** Accounts müssen existieren **bevor** Agents installiert werden, weil der Agent bei der Installation nach NEXUS-Login-Daten fragt und sich damit beim Brain registriert.
+
+**Neuen User anlegen** (z.B. für einen Freund):
+
+1. Zahnrad-Icon oben rechts → **Benutzerverwaltung**
+2. **+ Neuer Benutzer**: Username, Anzeigename, Passwort, Rolle (`user` oder `admin`)
+3. Login-Daten dem Freund mitteilen — er braucht sie bei der Agent-Installation
+
 ### 4. Windows PC einrichten
 
-Reihenfolge auf dem PC: zuerst Tailscale, dann WOL, dann Agent.
+Reihenfolge auf dem PC: Tailscale → WOL → Agent.
 
 **4a) Tailscale installieren:**
 
@@ -148,12 +156,6 @@ Damit der PC über das Dashboard aus dem ausgeschalteten Zustand geweckt werden 
 **Windows Energieoptionen:**
 - **Einstellungen → System → Netzbetrieb → Schnellstart**: **Aus** (blockiert WOL bei Herunterfahren)
 
-**MAC-Adresse notieren:**
-```powershell
-getmac /v
-```
-MAC-Adresse des **Ethernet-Adapters** aufschreiben — wird in `devices.yaml` als `mac_address` eingetragen.
-
 > **Wichtig:** WOL funktioniert nur über **Ethernet** (Kabel), nicht über WLAN.
 
 **4c) Remotedesktop aktivieren:**
@@ -162,18 +164,22 @@ MAC-Adresse des **Ethernet-Adapters** aufschreiben — wird in `devices.yaml` al
 
 **4d) NEXUS Agent installieren:**
 
+> **Voraussetzung:** Ein NEXUS-Account muss bereits existieren (siehe [Schritt 3](#3-dashboard--account-einrichtung)).
+
 In einer **erhöhten PowerShell** (Rechtsklick → Als Administrator):
 
-```powershell
-$env:NEXUS_BRAIN="<tailscale-ip-des-brain>"; irm https://werizu.github.io/nexus/install.ps1 | iex
-```
-
-Ohne Tailscale (nur lokales Netz):
 ```powershell
 irm https://werizu.github.io/nexus/install.ps1 | iex
 ```
 
-Der Agent installiert sich als Windows-Service (`NexusAgent`) und verbindet sich automatisch per MQTT mit dem Brain.
+Das Script fragt nach:
+1. **Brain IP** — Tailscale-IP des Brain Pi (aus Schritt 2)
+2. **NEXUS Username** — dein NEXUS-Benutzername
+3. **NEXUS Passwort** — dein NEXUS-Passwort
+
+Der Agent meldet sich beim Brain an, **registriert den PC automatisch als Gerät** (mit richtigem Owner), und startet als Windows-Service. Das Gerät erscheint sofort im Dashboard.
+
+> Kein manuelles Bearbeiten von `devices.yaml` nötig — die Registrierung läuft komplett automatisch.
 
 **4e) Neustart und prüfen:**
 
@@ -188,18 +194,20 @@ PC neustarten. Prüfen:
 
 Nur nötig wenn das MacBook auch über NEXUS gesteuert werden soll (Apps öffnen, RDP, etc.).
 
+> **Voraussetzung:** Tailscale installiert + NEXUS-Account existiert (siehe [Schritt 3](#3-dashboard--account-einrichtung)).
+
 **Zuerst Tailscale installieren** ([tailscale.com/download](https://tailscale.com/download) → macOS), dann:
 
-```bash
-NEXUS_BRAIN="<tailscale-ip-des-brain>" curl -fsSL https://werizu.github.io/nexus/install-mac.sh | bash
-```
-
-Ohne Tailscale (nur lokales Netz):
 ```bash
 curl -fsSL https://werizu.github.io/nexus/install-mac.sh | bash
 ```
 
-Der Agent installiert sich als LaunchAgent und startet automatisch beim Login.
+Das Script fragt nach:
+1. **Brain IP** — Tailscale-IP des Brain Pi
+2. **NEXUS Username** — dein NEXUS-Benutzername
+3. **NEXUS Passwort** — dein NEXUS-Passwort
+
+Der Agent registriert sich automatisch beim Brain, das Gerät erscheint im Dashboard. Installiert sich als LaunchAgent und startet automatisch beim Login.
 
 **Agent-Funktionen:** Apps/URLs öffnen, RDP-Verbindungen (Windows App), SSH-Terminals, Lautstärke, Helligkeit, Dark Mode, Screenshots, System-Metriken.
 
@@ -251,10 +259,13 @@ Bevor du zum Freund fährst — diese Schritte kannst du vorher erledigen:
 
 **NEXUS-Account anlegen:**
 
+> **Dieser Schritt muss vor der Agent-Installation passieren** — der Agent braucht Login-Daten bei der Einrichtung.
+
 1. Dashboard öffnen: `http://<tailscale-ip-des-brain>`
 2. Als Admin einloggen
 3. **Zahnrad-Icon** (oben rechts) → **Benutzerverwaltung**
 4. **+ Neuer Benutzer**: Benutzername, Anzeigename, temporäres Passwort, Rolle `user`
+5. Login-Daten aufschreiben — dein Freund braucht sie bei der Agent-Installation
 
 **Relay-Pi vorbereiten:**
 
@@ -339,16 +350,22 @@ MAC-Adresse des **Ethernet-Adapters** aufschreiben (Format `AA-BB-CC-DD-EE-FF`).
 Jetzt ist Tailscale aktiv und du kennst die Brain-IP. In einer **erhöhten PowerShell** (Rechtsklick → Als Administrator):
 
 ```powershell
-$env:NEXUS_BRAIN="<tailscale-ip-des-brain>"; irm https://werizu.github.io/nexus/install.ps1 | iex
+irm https://werizu.github.io/nexus/install.ps1 | iex
 ```
 
-Bei der Abfrage `device_id` eingeben: z.B. `friends_pc`
+Das Script fragt nach:
+1. **Brain IP** — Tailscale-IP des Brain Pi
+2. **NEXUS Username** — der Account, den du in der Vorbereitung angelegt hast
+3. **NEXUS Passwort** — das temporäre Passwort
+
+Der Agent registriert sich automatisch beim Brain. Das Gerät erscheint im Dashboard und gehört dem eingeloggten User — nur er sieht es, Admins sehen alles.
 
 **2g) Neustart und prüfen:**
 
 PC einmal neu starten. Prüfen ob:
 - Tailscale automatisch verbindet (Icon grün)
 - NEXUS Agent läuft: `Get-Service NexusAgent`
+- PC erscheint im Dashboard des Freundes
 
 ---
 
@@ -367,19 +384,29 @@ PC einmal neu starten. Prüfen ob:
    - Benutzer: Windows-Login des PCs
 3. Verbindung speichern
 
-**3c) Dashboard testen:**
+**3c) NEXUS Mac Agent installieren (optional):**
+
+Falls das MacBook auch über NEXUS gesteuert werden soll:
+
+```bash
+curl -fsSL https://werizu.github.io/nexus/install-mac.sh | bash
+```
+
+Fragt nach Brain-IP + NEXUS-Login. Agent registriert sich automatisch.
+
+> Ohne Agent braucht das MacBook nur Tailscale, Windows App und den Browser.
+
+**3d) Dashboard testen:**
 
 1. Browser öffnen: `http://<tailscale-ip-des-brain>`
 2. Mit dem NEXUS-Account einloggen (aus der Vorbereitung)
-3. Dashboard sollte laden und Geräte anzeigen
-
-> Das MacBook braucht keinen NEXUS Agent — nur Tailscale, Windows App und den Browser.
+3. Dashboard sollte laden und die Geräte des Freundes anzeigen (nicht deine — jeder User sieht nur seine eigenen)
 
 ---
 
-#### Zuhause: Schritt 4 — Geräte in NEXUS registrieren
+#### Zuhause: Schritt 4 — Relay-Pi in NEXUS registrieren
 
-Zurück an deinem Rechner — Relay-Pi und PC des Freundes in NEXUS eintragen.
+Der PC des Freundes hat sich in Schritt 2f **automatisch registriert** (über den Agent). Nur der Relay-Pi muss manuell eingetragen werden.
 
 **4a) SSH-Key zum Relay-Pi kopieren:**
 
@@ -392,9 +419,9 @@ Testen:
 ssh -i ~/.ssh/pi_manager_rsa marlon@<relay-tailscale-ip> "echo OK"
 ```
 
-**4b) Geräte registrieren:**
+**4b) Relay-Pi registrieren:**
 
-Über das Dashboard (Geräte → + Neues Gerät) oder in `config/devices.yaml`:
+In `config/devices.yaml`:
 
 ```yaml
 pis:
@@ -405,21 +432,22 @@ pis:
     ssh_user: marlon
     ssh_key: "~/.pi-manager/keys/id_rsa"
     role: relay
+```
 
+Brain neustarten: `sudo docker compose restart nexus-brain`
+
+**4c) WOL-Relay dem PC zuweisen:**
+
+Den automatisch registrierten PC des Freundes mit dem Relay verknüpfen — im Dashboard unter **Geräte** den PC bearbeiten und `wol_relay: relay_friend` hinzufügen. Oder in `config/devices.yaml` den Eintrag ergänzen:
+
+```yaml
 computers:
-  - id: friends_pc
-    name: "Freund PC"
-    plugin: pc_control
-    mac_address: "AA:BB:CC:DD:EE:FF"  # MAC aus Schritt 2c
-    ip: 100.x.x.x                     # Tailscale IP aus Schritt 2d
-    os: windows
-    check_port: 3389
-    wol_relay: relay_friend            # WOL über den Relay-Pi senden
+  - id: <username>_<hostname>     # wurde automatisch vergeben
+    wol_relay: relay_friend       # WOL über den Relay-Pi senden
+    mac_address: "AA:BB:CC:DD:EE:FF"  # MAC-Adresse aus Schritt 2c
 ```
 
 Das `wol_relay` Feld sagt dem Brain: "Sende WOL nicht lokal, sondern per SSH über den Relay-Pi."
-
-Bei Änderung per `devices.yaml`: Brain neustarten damit die Config geladen wird.
 
 ---
 
@@ -534,15 +562,22 @@ Scenes support:
 
 ### Agent Config (agent/config.yaml)
 
+Die Config wird bei der Installation automatisch erstellt. Beim ersten Start registriert sich der Agent beim Brain und ergänzt `device_id` und `token` selbst.
+
 ```yaml
 mqtt:
-  broker: "100.122.236.58"
+  broker: "100.122.236.58"       # Brain Tailscale-IP (bei Installation angegeben)
   port: 1883
-  client_id: "nexus-agent-pc"
+  client_id: "nexus-agent-marlon_desktop"  # wird automatisch gesetzt
+
+auth:
+  username: "marlon"             # NEXUS-Login (bei Installation angegeben)
+  password: "..."                # NEXUS-Passwort
+  token: "eyJ..."               # JWT-Token (wird automatisch gesetzt)
 
 agent:
-  device_id: "main_pc"
-  name: "Desktop PC"
+  device_id: "marlon_desktop"    # wird automatisch vom Brain vergeben
+  name: "Desktop"                # Hostname des PCs
   report_interval: 10
 
 alerts:
@@ -553,6 +588,8 @@ alerts:
   gpu_load: 95   # GPU load %
   cooldown: 300  # Seconds between repeated alerts
 ```
+
+> **device_id** wird automatisch aus `username_hostname` generiert (z.B. `marlon_desktop`, `freund_gaming_pc`). So ist garantiert eindeutig welches Gerät welchem User gehört.
 
 ## Dashboard
 
@@ -575,6 +612,10 @@ alerts:
 - **User Management** (admin only) — create users, assign roles (admin/user), delete users
 
 ### Adding Devices
+
+**PCs und Macs** werden automatisch registriert wenn der NEXUS Agent installiert wird. Der Agent fragt nach NEXUS-Login-Daten und registriert das Gerät beim Brain mit dem richtigen Owner. Kein manuelles Konfigurieren nötig.
+
+**Andere Geräte** (Lichter, Plugs, Pis, Kameras) manuell hinzufügen:
 
 1. Go to **Geräte** tab
 2. Click **+ Neues Gerät**
@@ -600,12 +641,20 @@ alerts:
 
 ## Multi-User System
 
-NEXUS supports multiple users with role-based access:
+NEXUS supports multiple users with role-based access and device ownership:
 
 | Role | Permissions |
 |---|---|
-| **admin** | Full access — manage devices, scenes, rooms, users |
-| **user** | Control devices, trigger scenes, view status |
+| **admin** | Full access — sieht alle Geräte, verwaltet User, Scenes, Rooms |
+| **user** | Sieht nur eigene Geräte + geteilte Geräte (owner = NULL) |
+
+### Device Ownership
+
+Jedes Gerät hat einen Owner. Wenn ein Agent sich registriert, wird der eingeloggte User automatisch als Owner gesetzt. Admins sehen alle Geräte, normale User nur ihre eigenen.
+
+- Agent-Installation → User loggt sich ein → Gerät bekommt `owner = username`
+- Manuell erstellte Geräte gehören dem User, der sie anlegt
+- Geräte ohne Owner (`owner = NULL`) sind für alle sichtbar
 
 ### User Management
 
@@ -613,6 +662,8 @@ Admins can manage users via the settings panel (gear icon → Benutzerverwaltung
 - Create new users with username, display name, password, and role
 - Promote/demote users between admin and user roles
 - Delete users
+
+> **Workflow:** Zuerst Account anlegen → dann Agent installieren. Der Agent braucht die NEXUS-Login-Daten bei der Einrichtung.
 
 ### API Authentication
 
@@ -646,6 +697,7 @@ Base URL: `http://<pi-ip>/api/v1`
 | `/auth/users` | GET | Admin | List all users |
 | `/auth/users/{username}` | PUT | Admin | Update user (role, display name) |
 | `/auth/users/{username}` | DELETE | Admin | Delete user |
+| `/agent/register` | POST | User | Auto-register a device (used by agents on first start) |
 
 ### Devices
 
