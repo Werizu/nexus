@@ -15,7 +15,7 @@ logger = logging.getLogger("nexus.plugin.pc_control")
 
 class PCControlPlugin(BasePlugin):
     name = "pc_control"
-    version = "2.0.0"
+    version = "2.1.0"
     device_type = "computer"
 
     def __init__(self):
@@ -23,6 +23,7 @@ class PCControlPlugin(BasePlugin):
         self._mqtt_client = None
         self._agent_states: dict[str, dict] = {}
         self._pending_responses: dict[str, asyncio.Future] = {}
+        self._plugin_manager = None
 
     async def initialize(self, config: dict) -> bool:
         logger.info("PC Control plugin initialized (MQTT agent mode)")
@@ -113,17 +114,64 @@ class PCControlPlugin(BasePlugin):
         finally:
             self._pending_responses.pop(request_id, None)
 
+    def set_plugin_manager(self, pm):
+        self._plugin_manager = pm
+
     async def _wake(self, device: dict) -> bool:
         mac = device.get("mac_address", "")
         if not mac:
             logger.error("No MAC address configured")
             return False
+
+        relay_id = device.get("wol_relay")
+        if relay_id:
+            return await self._wake_via_relay(mac, relay_id)
+
         try:
             send_magic_packet(mac)
-            logger.info(f"WOL sent to {mac}")
+            logger.info(f"WOL sent to {mac} (local broadcast)")
             return True
         except Exception as e:
             logger.error(f"WOL failed: {e}")
+            return False
+
+    async def _wake_via_relay(self, mac: str, relay_id: str) -> bool:
+        if not self._plugin_manager:
+            logger.error("No plugin manager — cannot use WOL relay")
+            return False
+
+        pi_plugin = self._plugin_manager.get_plugin("pi_manager")
+        if not pi_plugin:
+            logger.error("pi_manager plugin not loaded — cannot relay WOL")
+            return False
+
+        relay_device = pi_plugin.get_device_config(relay_id)
+        if not relay_device:
+            logger.error(f"WOL relay device '{relay_id}' not found")
+            return False
+
+        mac_clean = mac.replace("-", ":").upper()
+        cmd = f"wakeonlan {mac_clean} 2>/dev/null || python3 -c \"from wakeonlan import send_magic_packet; send_magic_packet('{mac_clean}')\""
+
+        try:
+            args = pi_plugin._ssh_args(relay_device) + [cmd]
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+            if proc.returncode == 0:
+                logger.info(f"WOL sent to {mac_clean} via relay '{relay_id}'")
+                return True
+            else:
+                logger.error(f"WOL relay failed (exit {proc.returncode}): {stderr.decode()}")
+                return False
+        except asyncio.TimeoutError:
+            logger.error(f"WOL relay '{relay_id}' timed out")
+            return False
+        except Exception as e:
+            logger.error(f"WOL relay failed: {e}")
             return False
 
     async def _ping(self, ip: str) -> bool:

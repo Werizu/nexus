@@ -187,63 +187,142 @@ Update `config/nexus.yaml` and `config/devices.yaml` to use Tailscale IPs. The d
 
 NEXUS unterstützt mehrere Benutzer — z.B. ein Freund, der seinen eigenen PC von unterwegs per RDP steuern will.
 
-#### Schritt 1: Tailscale-Zugang
+#### Das Problem: WOL über Tailscale
 
-Dein Freund braucht Zugang zu deinem Tailscale-Netzwerk, damit er das Dashboard (auf dem Pi) und seinen eigenen PC erreichen kann.
+Wake-on-LAN funktioniert nur im lokalen Netzwerk (Layer 2 Broadcast). Wenn der PC deines Freundes bei ihm zuhause steht und ausgeschaltet ist, läuft kein Tailscale — der Brain kann ihn nicht direkt aufwecken.
+
+**Lösung: WOL-Relay über einen Raspberry Pi**
+
+Ein kleiner Pi (Zero W reicht) steht im Netzwerk deines Freundes, läuft 24/7, hat Tailscale, und leitet WOL-Pakete ins lokale Netz weiter.
+
+```
+Freund an der Uni                  Freundes Netzwerk zuhause
+┌──────────┐                      ┌────────────┐     LAN      ┌──────────┐
+│ MacBook  │───── Tailscale ─────►│ Relay Pi   │──── WOL ────►│ Freund   │
+│ Dashboard│                      │ (Pi Zero W)│   Broadcast   │ PC (aus) │
+└──────────┘                      └────────────┘               └──────────┘
+       │                                │
+       │         Tailscale              │
+       └────────────────────────────────┘
+                    │
+              ┌─────┴──────┐
+              │ NEXUS Brain │
+              │ (dein Pi)   │
+              └────────────┘
+```
+
+#### Schritt 1: Relay-Pi vorbereiten
+
+**Hardware:** Raspberry Pi Zero W, Zero 2 W, 3B, oder neuer — alles was Netzwerk hat reicht. Verbrauch: ~0.5-1W (Pi Zero W).
+
+Auf dem **Relay-Pi**:
+
+```bash
+# 1. Raspberry Pi OS Lite installieren (headless, kein Desktop nötig)
+# 2. SSH aktivieren (ssh-Datei auf Boot-Partition)
+# 3. Ersteinrichtung: User + WLAN/LAN konfigurieren
+
+# 4. Tailscale installieren
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+# Tailscale IP notieren: tailscale ip -4
+
+# 5. wakeonlan installieren
+sudo apt-get update && sudo apt-get install -y wakeonlan
+
+# 6. SSH-Key einrichten (vom Brain aus zugreifen können)
+# Auf dem NEXUS Brain:
+ssh-copy-id -i ~/.ssh/pi_manager_rsa marlon@<relay-tailscale-ip>
+```
+
+> **Hinweis:** Der Relay-Pi muss per **Ethernet (LAN-Kabel)** am selben Router/Switch wie der PC des Freundes angeschlossen sein. WOL-Broadcasts funktionieren nicht über WLAN.
+
+#### Schritt 2: Tailscale-Zugang für den Freund
 
 1. Öffne [Tailscale Admin Console](https://login.tailscale.com/admin/users)
-2. Gehe zu **Users → Invite users**
-3. Gib die E-Mail deines Freundes ein und sende die Einladung
-4. Dein Freund installiert Tailscale auf **beiden** Geräten:
-   - Seinem **Mac/Laptop** (von dem er zugreift)
-   - Seinem **Windows-PC** (der ferngesteuert werden soll)
-5. Er meldet sich auf beiden mit der Einladung an — beide sind jetzt im Tailnet
+2. **Users → Invite users** → E-Mail des Freundes eingeben
+3. Freund installiert Tailscale auf seinem **Mac/Laptop** und meldet sich an
 
-> **Tailscale Free** erlaubt bis zu 3 Benutzer und 100 Geräte — mehr als genug.
+> **Tailscale Free** erlaubt bis zu 3 Benutzer und 100 Geräte.
 
-#### Schritt 2: PC des Freundes vorbereiten
+#### Schritt 3: PC und Relay-Pi registrieren
 
-Auf dem **Windows-PC deines Freundes**:
+Den **Relay-Pi** in `config/devices.yaml` als Pi registrieren:
+
+```yaml
+pis:
+  - id: relay_friend
+    name: "Relay Pi (Freund)"
+    plugin: pi_manager
+    hostname: 100.x.x.x          # Tailscale IP des Relay-Pi
+    ssh_user: marlon
+    ssh_key: "~/.pi-manager/keys/id_rsa"
+    role: relay
+```
+
+Den **PC des Freundes** mit `wol_relay` Feld registrieren:
+
+```yaml
+computers:
+  - id: friends_pc
+    name: "Freund PC"
+    plugin: pc_control
+    mac_address: "AA:BB:CC:DD:EE:FF"
+    ip: 100.x.x.x                # Tailscale IP des PCs
+    os: windows
+    check_port: 3389
+    wol_relay: relay_friend       # WOL wird über diesen Pi gesendet
+```
+
+Das `wol_relay` Feld sagt dem Brain: "Wenn dieser PC geweckt werden soll, sende das WOL-Paket nicht lokal, sondern per SSH über den angegebenen Pi."
+
+Alternativ können Geräte auch über das Dashboard registriert werden (Geräte → + Neues Gerät).
+
+#### Schritt 4: Windows-PC vorbereiten
+
+Auf dem **Windows-PC des Freundes**:
 
 1. **Tailscale installieren** und mit der Einladung anmelden
-2. **Remotedesktop aktivieren**: Einstellungen → System → Remotedesktop → An
-3. **NEXUS Agent installieren** (elevated PowerShell):
+2. **Wake-on-LAN aktivieren** (siehe [WOL einrichten](#wake-on-lan-einrichten) weiter oben)
+3. **Remotedesktop aktivieren**: Einstellungen → System → Remotedesktop → An
+4. **NEXUS Agent installieren** (elevated PowerShell):
    ```powershell
-   $env:NEXUS_BRAIN="<tailscale-ip-des-pi>"; irm https://werizu.github.io/nexus/install.ps1 | iex
+   $env:NEXUS_BRAIN="<tailscale-ip-des-brain>"; irm https://werizu.github.io/nexus/install.ps1 | iex
    ```
-   Dabei eine eigene `device_id` vergeben (z.B. `friends_pc`)
-4. **Tailscale IP notieren**: `tailscale ip -4` → z.B. `100.x.x.x`
+   Device ID: `friends_pc` (muss zur Config passen)
 
-#### Schritt 3: PC im NEXUS-Dashboard registrieren
+#### Schritt 5: NEXUS-Account anlegen
 
-1. Melde dich als Admin im Dashboard an
-2. Gehe zu **Geräte → + Neues Gerät**
-3. Kategorie: **Computer**, Plugin: **pc_control**
-4. Trage ein:
-   - Name: z.B. "Freund PC"
-   - Device ID: `friends_pc` (muss zur Agent-Config passen)
-   - IP: Tailscale-IP des PCs
-   - MAC-Adresse: für Wake-on-LAN
-   - OS: `windows`
-5. Speichern
-
-#### Schritt 4: NEXUS-Account für den Freund anlegen
-
-1. Dashboard → **Zahnrad-Icon** (oben rechts) → **Benutzerverwaltung**
+1. Dashboard → **Zahnrad-Icon** → **Benutzerverwaltung**
 2. **+ Neuer Benutzer** → Benutzername, Passwort, Rolle (`user`)
 3. Zugangsdaten dem Freund mitteilen
 
-Dein Freund kann sich jetzt unter `http://<tailscale-ip-des-pi>` einloggen und seinen eigenen PC starten, steuern und per RDP verbinden.
+#### Ablauf für den Freund
+
+1. `http://<tailscale-ip-des-brain>` im Browser öffnen
+2. Mit seinem Account einloggen
+3. Auf "Freund PC" → **Wake** klicken
+   - Brain sendet SSH-Befehl an Relay-Pi
+   - Relay-Pi sendet WOL-Broadcast ins lokale Netz
+   - PC wacht auf, Tailscale startet automatisch
+4. Per RDP verbinden (Windows App auf dem Mac)
 
 #### Zusammenfassung
 
-| Was | Wo |
+| Gerät | Standort | Rolle | Muss 24/7 laufen? |
+|---|---|---|---|
+| NEXUS Brain (dein Pi) | Bei dir | Backend, Dashboard | Ja |
+| Relay-Pi (z.B. Pi Zero W) | Beim Freund | WOL-Relay | Ja (~0.5W) |
+| Freund PC | Beim Freund | Wird ferngesteuert | Nein (wird per WOL geweckt) |
+| Freund MacBook | Mobil | Dashboard + RDP Client | Nein |
+
+| Was | Wo / Wie |
 |---|---|
 | Tailscale einladen | [admin.tailscale.com](https://login.tailscale.com/admin/users) → Invite |
-| Agent auf Freund-PC | PowerShell Installer mit eigener device_id |
-| PC registrieren | Dashboard → Geräte → + Neues Gerät |
-| NEXUS-Account anlegen | Dashboard → Zahnrad → + Neuer Benutzer |
-| Dashboard-Zugang | `http://<tailscale-ip-des-pi>` im Browser |
+| Relay-Pi einrichten | Tailscale + `wakeonlan` installieren, per LAN anschließen |
+| PC + Relay registrieren | `config/devices.yaml` mit `wol_relay` Feld |
+| Agent auf Freund-PC | PowerShell Installer mit `device_id: friends_pc` |
+| NEXUS-Account | Dashboard → Zahnrad → + Neuer Benutzer |
 
 ## Configuration
 

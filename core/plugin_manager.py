@@ -44,6 +44,12 @@ class PluginManager:
 
         # Register devices from config
         await self._register_devices()
+
+        # Wire cross-plugin references
+        pc_plugin = self.plugins.get("pc_control")
+        if pc_plugin and hasattr(pc_plugin, "set_plugin_manager"):
+            pc_plugin.set_plugin_manager(self)
+
         logger.info(f"Loaded {len(self.plugins)} plugins, {len(self._device_plugin_map)} devices mapped")
 
     async def _load_plugin(self, plugin_dir: Path, plugin_yaml: Path):
