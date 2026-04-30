@@ -9,10 +9,12 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 
 import psutil
 import paho.mqtt.client as mqtt
+import requests
 import yaml
 
 try:
@@ -41,6 +43,43 @@ def load_config() -> dict:
     return {}
 
 
+def save_config(cfg: dict):
+    with open(CONFIG_PATH, "w") as f:
+        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+
+
+def _get_mac_address() -> str:
+    mac = uuid.getnode()
+    return ":".join(f"{(mac >> (8 * i)) & 0xFF:02X}" for i in reversed(range(6)))
+
+
+def register_with_brain(brain_url: str, username: str, password: str) -> dict:
+    """Authenticate with Brain and register this device. Returns device_id and token."""
+    login_resp = requests.post(
+        f"{brain_url}/api/v1/auth/login",
+        json={"username": username, "password": password},
+        timeout=10,
+    )
+    login_resp.raise_for_status()
+    token = login_resp.json()["token"]
+
+    reg_resp = requests.post(
+        f"{brain_url}/api/v1/agent/register",
+        json={
+            "hostname": platform.node(),
+            "mac_address": _get_mac_address(),
+            "os": platform.system().lower(),
+            "name": platform.node(),
+        },
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
+    reg_resp.raise_for_status()
+    data = reg_resp.json()
+    data["token"] = token
+    return data
+
+
 class NexusAgent:
     def __init__(self, config: dict):
         mqtt_conf = config.get("mqtt", {})
@@ -49,8 +88,8 @@ class NexusAgent:
 
         self.broker = mqtt_conf.get("broker", "100.122.236.58")
         self.port = mqtt_conf.get("port", 1883)
-        self.client_id = mqtt_conf.get("client_id", "nexus-agent-pc")
-        self.device_id = agent_conf.get("device_id", "main_pc")
+        self.client_id = mqtt_conf.get("client_id", f"nexus-agent-{platform.node()}")
+        self.device_id = agent_conf.get("device_id", "")
         self.device_name = agent_conf.get("name", platform.node())
         self.report_interval = agent_conf.get("report_interval", 10)
 
@@ -447,6 +486,35 @@ class NexusAgent:
 
 def main():
     config = load_config()
+
+    # Auto-register with Brain if no device_id yet
+    if not config.get("agent", {}).get("device_id"):
+        brain_ip = config.get("mqtt", {}).get("broker", "")
+        auth = config.get("auth", {})
+        username = auth.get("username", "")
+        password = auth.get("password", "")
+
+        if not brain_ip or not username or not password:
+            logger.error("Missing config: mqtt.broker, auth.username, auth.password required for first start")
+            sys.exit(1)
+
+        brain_url = f"http://{brain_ip}:8000"
+        logger.info(f"Registering with Brain at {brain_url} as '{username}'...")
+
+        try:
+            result = register_with_brain(brain_url, username, password)
+        except Exception as e:
+            logger.error(f"Registration failed: {e}")
+            sys.exit(1)
+
+        device_id = result["device_id"]
+        config.setdefault("agent", {})["device_id"] = device_id
+        config["agent"]["name"] = platform.node()
+        config.setdefault("mqtt", {})["client_id"] = f"nexus-agent-{device_id}"
+        config["auth"]["token"] = result["token"]
+        save_config(config)
+        logger.info(f"Registered as '{device_id}' — config saved")
+
     agent = NexusAgent(config)
 
     def handle_signal(sig, frame):

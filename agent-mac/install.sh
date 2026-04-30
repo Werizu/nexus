@@ -4,41 +4,65 @@
 
 set -e
 
-BRAIN_IP="${NEXUS_BRAIN:-100.122.236.58}"
 INSTALL_DIR="$HOME/.nexus-agent"
 PLIST_NAME="com.nexus.agent"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_NAME}.plist"
 
 echo ""
 echo "  NEXUS Mac Agent Installer"
-echo "  Brain: $BRAIN_IP"
+echo "  ========================="
 echo ""
 
-# Check Python
+# ── Credentials ────────────────────────────────────────
+echo "  Dein NEXUS Admin muss dir einen Account angelegt haben."
+echo ""
+read -p "  Brain IP (Tailscale IP des Brain Pi): " BRAIN_IP
+read -p "  NEXUS Username: " NEXUS_USER
+read -sp "  NEXUS Passwort: " NEXUS_PASS
+echo ""
+
+if [ -z "$BRAIN_IP" ] || [ -z "$NEXUS_USER" ] || [ -z "$NEXUS_PASS" ]; then
+    echo "  [!] Alle Felder sind erforderlich."
+    exit 1
+fi
+
+# ── Verify connection ──────────────────────────────────
+echo ""
+echo "  [1/4] Verbindung zum Brain prüfen..."
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "http://${BRAIN_IP}:8000/api/v1/health" 2>/dev/null || echo "000")
+if [ "$HTTP_CODE" != "200" ]; then
+    echo "  [!] Brain nicht erreichbar unter http://${BRAIN_IP}:8000"
+    echo "  Prüfe: Ist Tailscale aktiv? Ist der Brain Pi eingeschaltet?"
+    exit 1
+fi
+echo "  [✓] Brain erreichbar"
+
+# ── Check Python ───────────────────────────────────────
 if ! command -v python3 &>/dev/null; then
     echo "  [!] Python 3 nicht gefunden. Bitte installieren: brew install python3"
     exit 1
 fi
 
-# Create directory
+# ── Download files ─────────────────────────────────────
+echo "  [2/4] Agent herunterladen..."
 mkdir -p "$INSTALL_DIR"
 
-# Download files
 BASE="https://raw.githubusercontent.com/Werizu/nexus/main/agent-mac"
 for f in nexus_agent_mac.py requirements.txt; do
     curl -fsSL "$BASE/$f" -o "$INSTALL_DIR/$f"
-    echo "  Downloaded $f"
 done
+echo "  [✓] Agent heruntergeladen"
 
-# Write config
+# ── Write config with credentials ──────────────────────
+echo "  [3/4] Konfiguration schreiben..."
 cat > "$INSTALL_DIR/config.yaml" <<EOF
 mqtt:
   broker: "$BRAIN_IP"
   port: 1883
-  client_id: "nexus-agent-mac"
+auth:
+  username: "$NEXUS_USER"
+  password: "$NEXUS_PASS"
 agent:
-  device_id: "main_mac"
-  name: "$(hostname -s)"
   report_interval: 10
 alerts:
   cpu: 90
@@ -47,19 +71,20 @@ alerts:
   cooldown: 300
 EOF
 
-# Create venv and install deps
+# ── Install dependencies ──────────────────────────────
 if [ ! -d "$INSTALL_DIR/venv" ]; then
     python3 -m venv "$INSTALL_DIR/venv"
 fi
 "$INSTALL_DIR/venv/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt"
-echo "  Dependencies installed"
+echo "  [✓] Dependencies installiert"
 
-# Unload existing service if present
+# ── Create & load LaunchAgent ─────────────────────────
+echo "  [4/4] Autostart einrichten..."
+
 if launchctl list | grep -q "$PLIST_NAME" 2>/dev/null; then
     launchctl unload "$PLIST_PATH" 2>/dev/null || true
 fi
 
-# Create LaunchAgent plist
 PYTHON_PATH="$INSTALL_DIR/venv/bin/python"
 cat > "$PLIST_PATH" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -87,11 +112,16 @@ cat > "$PLIST_PATH" <<EOF
 </plist>
 EOF
 
-# Load service
 launchctl load "$PLIST_PATH"
 
 echo ""
+echo "  ════════════════════════════════════════════════"
 echo "  NEXUS Mac Agent installiert!"
+echo "  ════════════════════════════════════════════════"
+echo ""
+echo "  Der Agent registriert sich automatisch beim Brain."
+echo "  Dein Gerät erscheint in wenigen Sekunden im Dashboard."
+echo ""
 echo "  Status:    launchctl list | grep nexus"
 echo "  Logs:      tail -f ~/.nexus-agent/nexus-agent-mac.log"
 echo "  Stoppen:   launchctl unload ~/Library/LaunchAgents/com.nexus.agent.plist"

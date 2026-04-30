@@ -248,6 +248,55 @@ async def change_password(body: dict, user: dict = Depends(require_auth)):
     return {"status": "ok"}
 
 
+# ─── Agent Registration ──────────────────────────────────
+@app.post("/api/v1/agent/register")
+async def register_agent(body: dict, user: dict = Depends(require_auth)):
+    """Agent calls this on first start to register itself. Requires user credentials."""
+    hostname = body.get("hostname", "")
+    mac_address = body.get("mac_address", "")
+    os_type = body.get("os", "unknown")
+    agent_name = body.get("name", hostname)
+
+    if not hostname:
+        raise HTTPException(400, "hostname is required")
+
+    device_id = f"{user['sub']}_{hostname}".lower().replace(" ", "_").replace("-", "_")
+
+    existing = config.get_device(device_id)
+    if existing:
+        return {
+            "status": "ok",
+            "device_id": device_id,
+            "message": "Device already registered",
+            "mqtt_topic_prefix": f"nexus/agent/{device_id}",
+        }
+
+    category = "computers"
+    device_data = {
+        "id": device_id,
+        "name": agent_name,
+        "plugin": "pc_control",
+        "os": os_type,
+        "owner": user["sub"],
+    }
+    if mac_address:
+        device_data["mac_address"] = mac_address
+
+    config.add_device(category, device_data)
+    await state_store.register_device(
+        device_id, category, agent_name, "pc_control", None, device_data, owner=user["sub"]
+    )
+    await plugin_manager.register_single_device(device_id, device_data, "pc_control")
+
+    logger.info(f"Agent registered: {device_id} (owner: {user['sub']}, os: {os_type})")
+    return {
+        "status": "ok",
+        "device_id": device_id,
+        "message": "Device registered",
+        "mqtt_topic_prefix": f"nexus/agent/{device_id}",
+    }
+
+
 # ─── Health ───────────────────────────────────────────────
 @app.get("/api/v1/health")
 async def health():

@@ -124,6 +124,12 @@ class PluginManager:
                     device_config=device,
                 )
 
+    async def register_single_device(self, device_id: str, device: dict, plugin_name: str):
+        """Register a single device at runtime (e.g. from agent registration)."""
+        if plugin_name in self.plugins:
+            self.plugins[plugin_name].register_device(device_id, device)
+            self._device_plugin_map[device_id] = plugin_name
+
     def get_plugin_for_device(self, device_id: str) -> BasePlugin | None:
         plugin_name = self._device_plugin_map.get(device_id)
         if plugin_name:
