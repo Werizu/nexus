@@ -118,6 +118,13 @@ class StateStore:
         row = await cursor.fetchone()
         self.device_count = row[0]
 
+    async def delete_device(self, device_id: str):
+        await self.db.execute("DELETE FROM device_state WHERE device_id = ?", (device_id,))
+        await self.db.commit()
+        cursor = await self.db.execute("SELECT COUNT(*) FROM device_state")
+        row = await cursor.fetchone()
+        self.device_count = row[0]
+
     async def update_device(self, device_id: str, state: dict):
         await self.db.execute(
             "UPDATE device_state SET state = ?, last_seen = ? WHERE device_id = ?",

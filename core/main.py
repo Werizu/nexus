@@ -380,6 +380,8 @@ async def update_device_config(device_id: str, body: dict):
 async def delete_device_endpoint(device_id: str):
     if not config.delete_device(device_id):
         raise HTTPException(404, "Device not found")
+    await state_store.delete_device(device_id)
+    plugin_manager._device_plugin_map.pop(device_id, None)
     return {"status": "ok", "device_id": device_id}
 
 
