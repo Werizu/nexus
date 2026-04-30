@@ -2,11 +2,21 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 
 const API_BASE = '/api/v1'
 
+function getToken() {
+  return localStorage.getItem('nexus_token')
+}
+
 async function api(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  })
+  const token = getToken()
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(`${API_BASE}${path}`, { headers, ...options })
+  if (res.status === 401) {
+    localStorage.removeItem('nexus_token')
+    localStorage.removeItem('nexus_user')
+    window.location.reload()
+    throw new Error('Session expired')
+  }
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
 }
@@ -40,7 +50,21 @@ export function useDevices() {
     await refresh()
   }, [refresh])
 
-  return { devices, loading, refresh, sendCommand }
+  const saveDevice = useCallback(async (deviceData, isNew = false) => {
+    if (isNew) {
+      await api('/devices', { method: 'POST', body: JSON.stringify(deviceData) })
+    } else {
+      await api(`/devices/${deviceData.id}`, { method: 'PUT', body: JSON.stringify(deviceData) })
+    }
+    await refresh()
+  }, [refresh])
+
+  const deleteDevice = useCallback(async (deviceId) => {
+    await api(`/devices/${deviceId}`, { method: 'DELETE' })
+    await refresh()
+  }, [refresh])
+
+  return { devices, loading, refresh, sendCommand, saveDevice, deleteDevice }
 }
 
 export function useScenes() {
@@ -177,11 +201,32 @@ export function useAlerts() {
 export function useRooms() {
   const [rooms, setRooms] = useState({})
 
-  useEffect(() => {
-    api('/rooms').then(setRooms).catch(console.error)
+  const refresh = useCallback(async () => {
+    try {
+      setRooms(await api('/rooms'))
+    } catch (e) {
+      console.error('Failed to load rooms:', e)
+    }
   }, [])
 
-  return { rooms }
+  useEffect(() => { refresh() }, [refresh])
+
+  const saveRoom = useCallback(async (roomId, roomData) => {
+    const exists = rooms[roomId]
+    if (exists) {
+      await api(`/rooms/${roomId}`, { method: 'PUT', body: JSON.stringify(roomData) })
+    } else {
+      await api('/rooms', { method: 'POST', body: JSON.stringify({ id: roomId, ...roomData }) })
+    }
+    await refresh()
+  }, [rooms, refresh])
+
+  const deleteRoom = useCallback(async (roomId) => {
+    await api(`/rooms/${roomId}`, { method: 'DELETE' })
+    await refresh()
+  }, [refresh])
+
+  return { rooms, refresh, saveRoom, deleteRoom }
 }
 
 export function useWebSocket(onMessage) {

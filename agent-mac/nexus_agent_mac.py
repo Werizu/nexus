@@ -41,7 +41,7 @@ class NexusMacAgent:
         agent_conf = config.get("agent", {})
         alerts_conf = config.get("alerts", {})
 
-        self.broker = mqtt_conf.get("broker", "192.168.178.202")
+        self.broker = mqtt_conf.get("broker", "100.122.236.58")
         self.port = mqtt_conf.get("port", 1883)
         self.client_id = mqtt_conf.get("client_id", "nexus-agent-mac")
         self.device_id = agent_conf.get("device_id", "main_mac")
@@ -161,7 +161,7 @@ class NexusMacAgent:
             case "scene_watch":
                 return self._open_scene_watch(params.get("scene", ""))
             case "rdp_connect":
-                return self._rdp_connect(params.get("host", ""), params.get("username", ""), params.get("password", ""))
+                return self._open_rdp()
             case "ssh_terminal":
                 return self._ssh_terminal(params.get("host", ""), params.get("user", "marlon"))
             case "notify":
@@ -303,32 +303,26 @@ class NexusMacAgent:
         script = f'''
         tell application "Terminal"
             activate
-            set w to do script "{cmd}"
+            set newTab to do script "{cmd}"
+            set theWindow to window 1
             repeat
                 delay 2
-                if not busy of w then exit repeat
+                try
+                    if not busy of newTab then exit repeat
+                on error
+                    exit repeat
+                end try
             end repeat
-            close w
+            delay 1
+            close theWindow saving no
         end tell
         '''
         subprocess.Popen(["osascript", "-e", script])
         return f"Scene watch opened for: {scene}"
 
-    def _rdp_connect(self, host: str, username: str = "", password: str = "") -> str:
-        if not host:
-            raise ValueError("No host specified")
-        cmd = [
-            "/opt/homebrew/bin/sdl-freerdp", f"/v:{host}",
-            "/cert:ignore", "/f",
-            "/network:lan",
-            "+fonts", "+window-drag",
-        ]
-        if username:
-            cmd.append(f"/u:{username}")
-        if password:
-            cmd.append(f"/p:{password}")
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return f"RDP connecting to {host}"
+    def _open_rdp(self) -> str:
+        subprocess.Popen(["open", "-a", "Windows App"])
+        return "Windows App opened"
 
     def _ssh_terminal(self, host: str, user: str, key: str = "") -> str:
         if not host:

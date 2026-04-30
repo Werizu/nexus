@@ -1,13 +1,20 @@
-import { Monitor, Sofa, Bed } from 'lucide-react'
+import { Monitor, Sofa, Bed, UtensilsCrossed, Bath, DoorOpen, Warehouse, TreePine, Home, Server, Pencil, Trash2 } from 'lucide-react'
 import DeviceCard from './DeviceCard'
 
 const ROOM_ICONS = {
   monitor: Monitor,
   sofa: Sofa,
   bed: Bed,
+  utensils: UtensilsCrossed,
+  bath: Bath,
+  'door-open': DoorOpen,
+  warehouse: Warehouse,
+  tree: TreePine,
+  home: Home,
+  server: Server,
 }
 
-export default function RoomView({ rooms, onCommand }) {
+export default function RoomView({ rooms, onCommand, onEdit, onDelete }) {
   const entries = Object.entries(rooms)
 
   if (entries.length === 0) {
@@ -26,10 +33,26 @@ export default function RoomView({ rooms, onCommand }) {
               <div className="p-2 rounded-lg bg-[#1e1e2e] text-[#00D4FF]">
                 <Icon size={20} />
               </div>
-              <div>
+              <div className="flex-1">
                 <h2 className="text-lg font-semibold text-white">{room.name}</h2>
                 <p className="text-xs text-gray-500">{devices.length} Geräte</p>
               </div>
+              {onEdit && (
+                <button
+                  onClick={() => onEdit(roomId, room)}
+                  className="p-1.5 text-gray-500 hover:text-[#00D4FF] transition-colors cursor-pointer"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  onClick={() => { if (confirm(`Raum "${room.name}" wirklich löschen?`)) onDelete(roomId) }}
+                  className="p-1.5 text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
             {devices.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">

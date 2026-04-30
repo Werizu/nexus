@@ -1,23 +1,32 @@
 import { useState, useCallback } from 'react'
+import LoginScreen from './components/LoginScreen'
 import Header from './components/Header'
 import DeviceCard from './components/DeviceCard'
 import SceneCard from './components/SceneCard'
 import SceneEditor from './components/SceneEditor'
+import DeviceEditor from './components/DeviceEditor'
+import RoomEditor from './components/RoomEditor'
 import PiMonitor from './components/PiMonitor'
 import LogViewer from './components/LogViewer'
 import RoomView from './components/RoomView'
 import AlertsPanel from './components/AlertsPanel'
+import SettingsPanel from './components/SettingsPanel'
 import { useDevices, useScenes, useHealth, usePis, useWebSocket, useLogs, useRooms, useAlerts } from './hooks/useNexus'
 
-function App() {
-  const { devices, loading, refresh, sendCommand } = useDevices()
+function Dashboard({ user, onLogout, onUserUpdate }) {
+  const { devices, loading, refresh, sendCommand, saveDevice, deleteDevice } = useDevices()
   const { scenes, trigger, saveScene, deleteScene } = useScenes()
   const [editorScene, setEditorScene] = useState(null)
   const [showEditor, setShowEditor] = useState(false)
+  const [showDeviceEditor, setShowDeviceEditor] = useState(false)
+  const [editDevice, setEditDevice] = useState(null)
+  const [showRoomEditor, setShowRoomEditor] = useState(false)
+  const [editRoom, setEditRoom] = useState(null)
+  const [editRoomId, setEditRoomId] = useState(null)
   const health = useHealth()
   const { pis } = usePis()
   const { logs } = useLogs()
-  const { rooms } = useRooms()
+  const { rooms, saveRoom, deleteRoom, refresh: refreshRooms } = useRooms()
   const { alerts, acknowledge, acknowledgeAll, unackedCount, refresh: refreshAlerts } = useAlerts()
   const [activeTab, setActiveTab] = useState('dashboard')
 
@@ -60,9 +69,8 @@ function App() {
 
   return (
     <div className="min-h-screen">
-      <Header health={health} />
+      <Header health={health} user={user} onLogout={onLogout} onSettings={() => setActiveTab('settings')} />
 
-      {/* Tab Navigation */}
       <nav className="border-b border-[#1e1e2e] bg-[#0a0a0f]">
         <div className="max-w-7xl mx-auto px-6 flex gap-1">
           {tabs.map((tab) => (
@@ -88,10 +96,8 @@ function App() {
           </div>
         ) : (
           <>
-            {/* Dashboard */}
             {activeTab === 'dashboard' && (
               <div className="space-y-8">
-                {/* Active Alerts Banner */}
                 {unackedCount > 0 && (
                   <button
                     onClick={() => setActiveTab('alerts')}
@@ -103,7 +109,6 @@ function App() {
                   </button>
                 )}
 
-                {/* Quick Scenes */}
                 <section>
                   <h2 className="text-lg font-semibold text-white mb-4">Szenen</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -119,7 +124,6 @@ function App() {
                   </div>
                 </section>
 
-                {/* All Devices */}
                 <section>
                   <h2 className="text-lg font-semibold text-white mb-4">Geräte</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -129,7 +133,6 @@ function App() {
                   </div>
                 </section>
 
-                {/* Pi Status */}
                 {pis.length > 0 && (
                   <section>
                     <h2 className="text-lg font-semibold text-white mb-4">Pi Status</h2>
@@ -143,9 +146,16 @@ function App() {
               </div>
             )}
 
-            {/* Devices Tab */}
             {activeTab === 'devices' && (
               <div className="space-y-8">
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => { setEditDevice(null); setShowDeviceEditor(true) }}
+                    className="px-3 py-1.5 text-sm bg-[#00D4FF] text-black font-medium rounded-lg hover:bg-[#00b8d4] transition-colors cursor-pointer"
+                  >
+                    + Neues Gerät
+                  </button>
+                </div>
                 {Object.entries(categories).map(([cat, devs]) => (
                   <section key={cat}>
                     <h2 className="text-lg font-semibold text-white mb-4">
@@ -154,7 +164,13 @@ function App() {
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                       {devs.map((device) => (
-                        <DeviceCard key={device.device_id} device={device} onCommand={sendCommand} />
+                        <DeviceCard
+                          key={device.device_id}
+                          device={device}
+                          onCommand={sendCommand}
+                          onEdit={() => { setEditDevice(device); setShowDeviceEditor(true) }}
+                          onDelete={() => { if (confirm(`Gerät "${device.name}" wirklich löschen?`)) deleteDevice(device.device_id) }}
+                        />
                       ))}
                     </div>
                   </section>
@@ -162,7 +178,6 @@ function App() {
               </div>
             )}
 
-            {/* Scenes Tab */}
             {activeTab === 'scenes' && (
               <div>
                 <div className="flex justify-between items-center mb-4">
@@ -188,12 +203,25 @@ function App() {
               </div>
             )}
 
-            {/* Rooms Tab */}
             {activeTab === 'rooms' && (
-              <RoomView rooms={rooms} onCommand={sendCommand} />
+              <div>
+                <div className="flex justify-end mb-4">
+                  <button
+                    onClick={() => { setEditRoom(null); setEditRoomId(null); setShowRoomEditor(true) }}
+                    className="px-3 py-1.5 text-sm bg-[#00D4FF] text-black font-medium rounded-lg hover:bg-[#00b8d4] transition-colors cursor-pointer"
+                  >
+                    + Neuer Raum
+                  </button>
+                </div>
+                <RoomView
+                  rooms={rooms}
+                  onCommand={sendCommand}
+                  onEdit={(roomId, room) => { setEditRoomId(roomId); setEditRoom(room); setShowRoomEditor(true) }}
+                  onDelete={async (roomId) => { await deleteRoom(roomId) }}
+                />
+              </div>
             )}
 
-            {/* Pi Monitor Tab */}
             {activeTab === 'pis' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pis.map((pi) => (
@@ -205,14 +233,16 @@ function App() {
               </div>
             )}
 
-            {/* Alerts Tab */}
             {activeTab === 'alerts' && (
               <AlertsPanel alerts={alerts} onAcknowledge={acknowledge} onAcknowledgeAll={acknowledgeAll} />
             )}
 
-            {/* Logs Tab */}
             {activeTab === 'logs' && (
               <LogViewer logs={logs} />
+            )}
+
+            {activeTab === 'settings' && (
+              <SettingsPanel user={user} onUserUpdate={onUserUpdate} />
             )}
           </>
         )}
@@ -223,10 +253,58 @@ function App() {
           scene={editorScene}
           onSave={saveScene}
           onClose={() => setShowEditor(false)}
+          devices={devices}
+        />
+      )}
+
+      {showDeviceEditor && (
+        <DeviceEditor
+          device={editDevice}
+          onSave={saveDevice}
+          onClose={() => setShowDeviceEditor(false)}
+        />
+      )}
+
+      {showRoomEditor && (
+        <RoomEditor
+          room={editRoom}
+          roomId={editRoomId}
+          allDevices={devices}
+          onSave={async (roomId, data) => { await saveRoom(roomId, data); await refreshRooms() }}
+          onClose={() => setShowRoomEditor(false)}
         />
       )}
     </div>
   )
+}
+
+function App() {
+  const [user, setUser] = useState(() => {
+    const stored = localStorage.getItem('nexus_user')
+    return stored ? JSON.parse(stored) : null
+  })
+
+  const handleLogin = (token, userData) => {
+    localStorage.setItem('nexus_token', token)
+    localStorage.setItem('nexus_user', JSON.stringify(userData))
+    setUser(userData)
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('nexus_token')
+    localStorage.removeItem('nexus_user')
+    setUser(null)
+  }
+
+  const handleUserUpdate = (updated) => {
+    setUser(updated)
+  }
+
+  if (!user) {
+    return <LoginScreen onLogin={handleLogin} />
+  }
+
+  return <Dashboard user={user} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />
 }
 
 export default App

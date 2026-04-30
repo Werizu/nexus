@@ -1,7 +1,9 @@
 """NEXUS State Store — SQLite-backed device state and log storage."""
 
+import hashlib
 import json
 import logging
+import secrets
 import time
 from pathlib import Path
 
@@ -58,6 +60,16 @@ class StateStore:
             CREATE INDEX IF NOT EXISTS idx_logs_device ON logs(device);
             CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_alerts_device ON alerts(device_id);
+
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user',
+                created_at REAL NOT NULL
+            );
         """)
         await self.db.commit()
 
@@ -188,6 +200,67 @@ class StateStore:
     async def acknowledge_all_alerts(self):
         await self.db.execute("UPDATE alerts SET acknowledged = 1 WHERE acknowledged = 0")
         await self.db.commit()
+
+    # ─── Users ───
+    @staticmethod
+    def _hash_password(password: str, salt: str) -> str:
+        return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex()
+
+    async def create_user(self, username: str, password: str, display_name: str, role: str = "user") -> dict | None:
+        salt = secrets.token_hex(16)
+        pw_hash = self._hash_password(password, salt)
+        try:
+            await self.db.execute(
+                "INSERT INTO users (username, password_hash, salt, display_name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (username, pw_hash, salt, display_name, role, time.time())
+            )
+            await self.db.commit()
+            return {"username": username, "display_name": display_name, "role": role}
+        except aiosqlite.IntegrityError:
+            return None
+
+    async def verify_user(self, username: str, password: str) -> dict | None:
+        cursor = await self.db.execute("SELECT * FROM users WHERE username = ?", (username,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        if self._hash_password(password, row["salt"]) != row["password_hash"]:
+            return None
+        return {"id": row["id"], "username": row["username"], "display_name": row["display_name"], "role": row["role"]}
+
+    async def get_users(self) -> list[dict]:
+        cursor = await self.db.execute("SELECT id, username, display_name, role, created_at FROM users ORDER BY created_at")
+        rows = await cursor.fetchall()
+        return [{"id": r["id"], "username": r["username"], "display_name": r["display_name"], "role": r["role"]} for r in rows]
+
+    async def delete_user(self, username: str) -> bool:
+        cursor = await self.db.execute("DELETE FROM users WHERE username = ?", (username,))
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    async def update_user(self, username: str, updates: dict) -> bool:
+        sets, vals = [], []
+        if "display_name" in updates:
+            sets.append("display_name = ?")
+            vals.append(updates["display_name"])
+        if "role" in updates:
+            sets.append("role = ?")
+            vals.append(updates["role"])
+        if "password" in updates:
+            salt = secrets.token_hex(16)
+            sets.extend(["password_hash = ?", "salt = ?"])
+            vals.extend([self._hash_password(updates["password"], salt), salt])
+        if not sets:
+            return False
+        vals.append(username)
+        await self.db.execute(f"UPDATE users SET {', '.join(sets)} WHERE username = ?", vals)
+        await self.db.commit()
+        return True
+
+    async def user_count(self) -> int:
+        cursor = await self.db.execute("SELECT COUNT(*) FROM users")
+        row = await cursor.fetchone()
+        return row[0]
 
     async def close(self):
         if self.db:

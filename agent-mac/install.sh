@@ -4,7 +4,7 @@
 
 set -e
 
-BRAIN_IP="${NEXUS_BRAIN:-192.168.178.202}"
+BRAIN_IP="${NEXUS_BRAIN:-100.122.236.58}"
 INSTALL_DIR="$HOME/.nexus-agent"
 PLIST_NAME="com.nexus.agent"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_NAME}.plist"

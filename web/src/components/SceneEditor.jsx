@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Plus, Trash2, GripVertical } from 'lucide-react'
+import { X, Plus, Trash2 } from 'lucide-react'
 
 const ACTION_TYPES = [
   { value: 'light.on', label: 'Licht ein' },
@@ -15,9 +15,11 @@ const ACTION_TYPES = [
   { value: 'pc.restart', label: 'PC neustarten' },
   { value: 'pc.sleep', label: 'PC Ruhezustand' },
   { value: 'pc.lock', label: 'PC sperren' },
-  { value: 'pc.rdp_connect', label: 'Remote Desktop (RDP)', params: ['host', 'username', 'password'] },
-  { value: 'pc.open_url', label: 'URL öffnen', params: ['url'] },
-  { value: 'pc.open_app', label: 'App öffnen', params: ['app'] },
+  { value: 'mac.rdp_connect', label: 'Remote Desktop öffnen', noDevice: true },
+  { value: 'mac.open_url', label: 'URL öffnen (Mac)', params: ['url'], noDevice: true },
+  { value: 'mac.open_app', label: 'App öffnen (Mac)', params: ['app'], noDevice: true },
+  { value: 'pc.open_url', label: 'URL öffnen (PC)', params: ['url'] },
+  { value: 'pc.open_app', label: 'App öffnen (PC)', params: ['app'] },
   { value: 'pc.launch', label: 'Programm starten', params: ['program'] },
   { value: 'pc.volume', label: 'Lautstärke', params: ['level'] },
   { value: 'pc.notify', label: 'Benachrichtigung', params: ['title', 'message'] },
@@ -31,9 +33,9 @@ const PARAM_CONFIG = {
   seconds: { label: 'Sekunden', type: 'number', min: 1, max: 300, default: 1 },
   timeout: { label: 'Timeout (Sek.)', type: 'number', min: 10, max: 300, default: 90 },
   wait_until_online: { label: 'Warten bis online', type: 'checkbox', default: false },
-  host: { label: 'Host / IP', type: 'text', placeholder: 'z.B. 192.168.178.43' },
+  host: { label: 'Host / IP', type: 'text', placeholder: 'z.B. 100.123.253.88' },
   username: { label: 'Benutzername', type: 'text', placeholder: 'z.B. user@email.com' },
-  url: { label: 'URL', type: 'text', placeholder: 'z.B. http://192.168.178.202' },
+  url: { label: 'URL', type: 'text', placeholder: 'z.B. http://100.122.236.58' },
   app: { label: 'App-Name', type: 'text', placeholder: 'z.B. Safari' },
   program: { label: 'Programm-Pfad', type: 'text', placeholder: 'z.B. notepad.exe' },
   password: { label: 'Passwort', type: 'password', placeholder: 'Passwort' },
@@ -42,20 +44,6 @@ const PARAM_CONFIG = {
   text: { label: 'Text', type: 'text', placeholder: 'Text zum Sprechen...' },
   cmd: { label: 'Befehl', type: 'text', placeholder: 'z.B. echo hello' },
 }
-
-const DEVICES = [
-  { value: 'light_1', label: 'Light 1', category: 'lights' },
-  { value: 'light_2', label: 'Light 2', category: 'lights' },
-  { value: 'light_3', label: 'Light 3', category: 'lights' },
-  { value: 'light_4', label: 'Light 4', category: 'lights' },
-  { value: 'plug_pc', label: 'PC Steckdose', category: 'plugs' },
-  { value: 'plug_tv', label: 'Fernseher Steckdose', category: 'plugs' },
-  { value: 'main_pc', label: 'Desktop PC', category: 'computers' },
-  { value: 'main_mac', label: 'MacBook', category: 'computers' },
-  { value: 'brain', label: 'NEXUS Brain', category: 'pis' },
-  { value: 'server1', label: 'Server 1', category: 'pis' },
-  { value: 'server3', label: 'Server 3', category: 'pis' },
-]
 
 const COLORS = [
   '#00D4FF', '#3498DB', '#2ECC71', '#E74C3C', '#F39C12',
@@ -75,14 +63,15 @@ const ICONS = [
   { value: 'coffee', label: 'Kaffee' },
 ]
 
-const EMPTY_ACTION = { action: 'light.on', device: 'light_1' }
+const EMPTY_ACTION = { action: 'light.on', device: '' }
 
 function actionNeedsDevice(actionType) {
   const meta = ACTION_TYPES.find(a => a.value === actionType)
   return !meta?.noDevice
 }
 
-export default function SceneEditor({ scene, onSave, onClose }) {
+export default function SceneEditor({ scene, onSave, onClose, devices = [] }) {
+  const deviceOptions = devices.map(d => ({ value: d.device_id, label: d.name, category: d.category }))
   const isEdit = !!scene
 
   const [name, setName] = useState('')
@@ -277,7 +266,8 @@ export default function SceneEditor({ scene, onSave, onClose }) {
                           onChange={e => updateAction(i, 'device', e.target.value)}
                           className="flex-1 bg-[#12121a] border border-[#2a2a3e] rounded px-2 py-1.5 text-xs text-white focus:outline-none"
                         >
-                          {DEVICES.map(d => (
+                          <option value="">Gerät wählen...</option>
+                          {deviceOptions.map(d => (
                             <option key={d.value} value={d.value}>{d.label}</option>
                           ))}
                         </select>

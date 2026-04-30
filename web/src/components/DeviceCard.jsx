@@ -1,4 +1,4 @@
-import { Monitor, Cpu, Camera, Speaker, Lightbulb, Plug, Power, PowerOff, RotateCcw } from 'lucide-react'
+import { Monitor, Cpu, Camera, Speaker, Lightbulb, Plug, Power, PowerOff, RotateCcw, Pencil, Trash2 } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 
 const CATEGORY_ICONS = {
@@ -19,7 +19,7 @@ const CATEGORY_COLORS = {
   plugs: 'text-green-400',
 }
 
-export default function DeviceCard({ device, onCommand }) {
+export default function DeviceCard({ device, onCommand, onEdit, onDelete }) {
   const Icon = CATEGORY_ICONS[device.category] || Cpu
   const color = CATEGORY_COLORS[device.category] || 'text-gray-400'
   const state = device.state || {}
@@ -38,7 +38,19 @@ export default function DeviceCard({ device, onCommand }) {
             <p className="text-xs text-gray-500 font-mono">{ip}</p>
           </div>
         </div>
-        <StatusBadge online={isOn} />
+        <div className="flex items-center gap-1">
+          {onEdit && (
+            <button onClick={onEdit} className="p-1 text-gray-600 hover:text-[#00D4FF] cursor-pointer">
+              <Pencil size={12} />
+            </button>
+          )}
+          {onDelete && (
+            <button onClick={onDelete} className="p-1 text-gray-600 hover:text-red-400 cursor-pointer">
+              <Trash2 size={12} />
+            </button>
+          )}
+          <StatusBadge online={isOn} />
+        </div>
       </div>
 
       {/* State details */}

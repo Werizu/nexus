@@ -17,8 +17,8 @@ except ImportError:
     sys.exit(1)
 
 # ─── Config ──────────────────────────────────────────────
-BRAIN_URL = "http://192.168.178.202:8000"
-WS_URL = "ws://192.168.178.202:8000/ws/realtime"
+BRAIN_URL = "http://100.122.236.58:8000"
+WS_URL = "ws://100.122.236.58:8000/ws/realtime"
 API_BASE = f"{BRAIN_URL}/api/v1"
 
 # ─── ANSI Colors ─────────────────────────────────────────

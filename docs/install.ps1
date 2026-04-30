@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$BrainIP = if ($env:NEXUS_BRAIN) { $env:NEXUS_BRAIN } else { "192.168.178.202" }
+$BrainIP = if ($env:NEXUS_BRAIN) { $env:NEXUS_BRAIN } else { "100.122.236.58" }
 $InstallDir = "$env:ProgramFiles\NEXUS Agent"
 
 Write-Host ""

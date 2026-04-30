@@ -15,23 +15,13 @@ conditions:
   - time_between: ["07:00", "02:00"]
 
 actions:
-  # 1. Lichter auf Focus-Mode (kühles Weißlicht, 70%)
-  - action: light.focus
-    device: light_1
-  - action: light.focus
-    device: light_2
-  - action: light.focus
-    device: light_3
-  - action: light.focus
-    device: light_4
-
-  # 2. PC-Steckdose einschalten (Monitor, Peripherie)
+  # 1. PC-Steckdose einschalten (Monitor, Peripherie)
   - action: plug.on
     device: plug_pc
 
-  # 3. Kurz warten, dann PC aufwecken
+  # 3. Warten bis Netzteil Standby-Strom liefert
   - action: wait
-    seconds: 2
+    seconds: 10
 
   # 4. Wake-on-LAN → warten bis Agent meldet "online"
   - action: pc.wake
@@ -43,12 +33,9 @@ actions:
   - action: wait
     seconds: 15
 
-  # 6. Mac: RDP zum PC öffnen
-  - action: pc.rdp_connect
-    device: main_mac
-    host: "192.168.178.43"
+  # 6. Mac: Windows App öffnen (Verbindung manuell klicken)
+  - action: mac.rdp_connect
 
-  # 6. Mac: NEXUS Dashboard im Browser öffnen
-  - action: pc.open_url
-    device: main_mac
-    url: "http://192.168.178.202"
+  # 7. Mac: NEXUS Dashboard im Browser öffnen
+  - action: mac.open_url
+    url: "http://100.122.236.58"

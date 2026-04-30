@@ -1,6 +1,6 @@
-import { Activity, Wifi, WifiOff } from 'lucide-react'
+import { Wifi, WifiOff, LogOut, Settings } from 'lucide-react'
 
-export default function Header({ health }) {
+export default function Header({ health, user, onLogout, onSettings }) {
   const ok = health?.status === 'ok'
   const mqtt = health?.mqtt_connected
   const deviceCount = health?.devices_registered || 0
@@ -34,6 +34,18 @@ export default function Header({ health }) {
             )}
             <div className={`w-2 h-2 rounded-full ${ok ? 'bg-emerald-400' : 'bg-red-400'}`} />
           </div>
+
+          {user && (
+            <div className="flex items-center gap-2 ml-2 pl-2 border-l border-[#1e1e2e]">
+              <span className="text-xs text-gray-400">{user.display_name}</span>
+              <button onClick={onSettings} className="text-gray-500 hover:text-gray-300 cursor-pointer" title="Einstellungen">
+                <Settings size={14} />
+              </button>
+              <button onClick={onLogout} className="text-gray-500 hover:text-red-400 cursor-pointer" title="Abmelden">
+                <LogOut size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

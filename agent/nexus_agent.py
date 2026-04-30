@@ -47,7 +47,7 @@ class NexusAgent:
         agent_conf = config.get("agent", {})
         alerts_conf = config.get("alerts", {})
 
-        self.broker = mqtt_conf.get("broker", "192.168.178.202")
+        self.broker = mqtt_conf.get("broker", "100.122.236.58")
         self.port = mqtt_conf.get("port", 1883)
         self.client_id = mqtt_conf.get("client_id", "nexus-agent-pc")
         self.device_id = agent_conf.get("device_id", "main_pc")

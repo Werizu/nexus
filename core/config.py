@@ -106,3 +106,58 @@ class NexusConfig:
                 return None
             val = val.get(k)
         return val
+
+    # --- Mutators ---
+    def save_devices(self):
+        with open(self.config_dir / "devices.yaml", "w") as f:
+            yaml.dump({"devices": self._devices.get("devices", {})}, f,
+                      default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+    def add_device(self, category: str, device: dict):
+        devices = self._devices.setdefault("devices", {})
+        devices.setdefault(category, []).append(device)
+        self.save_devices()
+
+    def update_device(self, device_id: str, updates: dict):
+        for category in self.devices.values():
+            for i, dev in enumerate(category):
+                if dev["id"] == device_id:
+                    category[i] = {**dev, **updates, "id": device_id}
+                    self.save_devices()
+                    return category[i]
+        return None
+
+    def delete_device(self, device_id: str) -> bool:
+        for category in self.devices.values():
+            for dev in category:
+                if dev["id"] == device_id:
+                    category.remove(dev)
+                    self.save_devices()
+                    return True
+        return False
+
+    def save_rooms(self):
+        with open(self.config_dir / "rooms.yaml", "w") as f:
+            yaml.dump({"rooms": self._rooms.get("rooms", {})}, f,
+                      default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+    def add_room(self, room_id: str, room: dict):
+        rooms = self._rooms.setdefault("rooms", {})
+        rooms[room_id] = room
+        self.save_rooms()
+
+    def update_room(self, room_id: str, updates: dict):
+        rooms = self._rooms.get("rooms", {})
+        if room_id not in rooms:
+            return None
+        rooms[room_id] = {**rooms[room_id], **updates}
+        self.save_rooms()
+        return rooms[room_id]
+
+    def delete_room(self, room_id: str) -> bool:
+        rooms = self._rooms.get("rooms", {})
+        if room_id in rooms:
+            del rooms[room_id]
+            self.save_rooms()
+            return True
+        return False

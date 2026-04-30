@@ -236,7 +236,8 @@ class SceneEngine:
         return await self._action_device(device_id, command, action)
 
     async def _wait_for_online(self, device_id: str, plugin: Any, timeout: int) -> str:
-        """Wait until a device comes online."""
+        """Wait until a device comes online (ignores stale retained state)."""
+        await self.state_store.update_device(device_id, {"online": False})
         elapsed = 0
         interval = 5
         while elapsed < timeout:
@@ -248,11 +249,16 @@ class SceneEngine:
         return f"Timeout after {timeout}s"
 
     async def _action_mac(self, command: str, action: dict) -> str:
-        """Mac-specific actions (VNC connect etc.)."""
-        if command == "connect_vnc":
-            host = action.get("host", "")
-            return f"VNC connect to {host} (requires local execution)"
-        return f"Unknown mac command: {command}"
+        """Mac-specific actions — sends directly to Mac agent via MQTT."""
+        plugin = self.plugin_manager.get_plugin_for_device("main_mac")
+        if not plugin:
+            return "No plugin for Mac agent"
+        params = {k: v for k, v in action.items() if k not in ("action", "device")}
+        try:
+            success = await plugin._send_agent_command("main_mac", command, params)
+            return "ok" if success else "failed"
+        except Exception as e:
+            return f"Mac command failed: {e}"
 
     async def _action_speak(self, text: str) -> str:
         """Send text to Jarvis/Alexa for speech."""

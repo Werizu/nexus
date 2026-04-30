@@ -2,9 +2,11 @@
 
 import asyncio
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import jwt
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -25,13 +27,49 @@ mqtt_client = MQTTClient(config, state_store, ws_manager)
 plugin_manager = PluginManager(config, mqtt_client, state_store)
 scene_engine = SceneEngine(config, plugin_manager, state_store, ws_manager)
 
+JWT_SECRET = config.secret("jwt_secret") or secrets.token_hex(32)
+JWT_ALGORITHM = "HS256"
 
-def verify_auth(request: Request):
-    if not config.auth_enabled:
-        return
-    token = request.headers.get("Authorization", "").removeprefix("Bearer ")
-    if token != config.bearer_token:
+
+def _create_token(user: dict) -> str:
+    import time
+    payload = {
+        "sub": user["username"],
+        "role": user["role"],
+        "display_name": user["display_name"],
+        "exp": int(time.time()) + 86400 * 30,
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def _decode_token(token: str) -> dict | None:
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+
+
+async def get_current_user(request: Request) -> dict | None:
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        payload = _decode_token(auth[7:])
+        if payload:
+            return payload
+    return None
+
+
+async def require_auth(request: Request) -> dict:
+    user = await get_current_user(request)
+    if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
+    return user
+
+
+async def require_admin(request: Request) -> dict:
+    user = await require_auth(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return user
 
 
 @asynccontextmanager
@@ -44,6 +82,11 @@ async def lifespan(app: FastAPI):
     data_dir.mkdir(parents=True, exist_ok=True)
 
     await state_store.initialize()
+
+    if await state_store.user_count() == 0:
+        await state_store.create_user("marlon", "nexus", "Marlon", role="admin")
+        logger.info("Created default admin user: marlon / nexus (change password!)")
+
     await plugin_manager.discover_and_load()
     await scene_engine.load_scenes()
 
@@ -146,6 +189,65 @@ app.add_middleware(
 ws_manager.mount(app)
 
 
+# ─── Auth ────────────────────────────────────────────────
+@app.post("/api/v1/auth/login")
+async def login(body: dict):
+    username = body.get("username", "")
+    password = body.get("password", "")
+    user = await state_store.verify_user(username, password)
+    if not user:
+        raise HTTPException(401, "Falsche Anmeldedaten")
+    token = _create_token(user)
+    return {"token": token, "user": user}
+
+
+@app.post("/api/v1/auth/register", dependencies=[Depends(require_admin)])
+async def register(body: dict):
+    username = body.get("username", "").strip()
+    password = body.get("password", "")
+    display_name = body.get("display_name", username)
+    role = body.get("role", "user")
+    if not username or not password:
+        raise HTTPException(400, "Username und Passwort erforderlich")
+    user = await state_store.create_user(username, password, display_name, role)
+    if not user:
+        raise HTTPException(409, f"User '{username}' existiert bereits")
+    return {"status": "ok", "user": user}
+
+
+@app.get("/api/v1/auth/me")
+async def auth_me(user: dict = Depends(require_auth)):
+    return user
+
+
+@app.get("/api/v1/auth/users", dependencies=[Depends(require_admin)])
+async def list_users():
+    return await state_store.get_users()
+
+
+@app.delete("/api/v1/auth/users/{username}", dependencies=[Depends(require_admin)])
+async def remove_user(username: str):
+    if not await state_store.delete_user(username):
+        raise HTTPException(404, "User not found")
+    return {"status": "ok"}
+
+
+@app.put("/api/v1/auth/users/{username}", dependencies=[Depends(require_admin)])
+async def update_user_endpoint(username: str, body: dict):
+    if not await state_store.update_user(username, body):
+        raise HTTPException(404, "User not found")
+    return {"status": "ok"}
+
+
+@app.put("/api/v1/auth/password")
+async def change_password(body: dict, user: dict = Depends(require_auth)):
+    new_password = body.get("password", "")
+    if not new_password:
+        raise HTTPException(400, "Passwort erforderlich")
+    await state_store.update_user(user["sub"], {"password": new_password})
+    return {"status": "ok"}
+
+
 # ─── Health ───────────────────────────────────────────────
 @app.get("/api/v1/health")
 async def health():
@@ -161,12 +263,12 @@ async def health():
 
 
 # ─── Devices ──────────────────────────────────────────────
-@app.get("/api/v1/devices", dependencies=[Depends(verify_auth)])
+@app.get("/api/v1/devices", dependencies=[Depends(require_auth)])
 async def list_devices():
     return await state_store.get_all_devices()
 
 
-@app.get("/api/v1/devices/{device_id}", dependencies=[Depends(verify_auth)])
+@app.get("/api/v1/devices/{device_id}", dependencies=[Depends(require_auth)])
 async def get_device(device_id: str):
     device = await state_store.get_device(device_id)
     if not device:
@@ -174,7 +276,7 @@ async def get_device(device_id: str):
     return device
 
 
-@app.post("/api/v1/devices/{device_id}/command", dependencies=[Depends(verify_auth)])
+@app.post("/api/v1/devices/{device_id}/command", dependencies=[Depends(require_auth)])
 async def device_command(device_id: str, body: dict):
     command = body.get("command")
     params = body.get("params", {})
@@ -195,13 +297,45 @@ async def device_command(device_id: str, body: dict):
     return {"status": "ok", "device_id": device_id, "state": state}
 
 
+@app.post("/api/v1/devices", dependencies=[Depends(require_auth)])
+async def create_device(body: dict):
+    device_id = body.get("id")
+    category = body.get("category")
+    if not device_id or not category:
+        raise HTTPException(400, "Missing 'id' or 'category'")
+    if config.get_device(device_id):
+        raise HTTPException(409, f"Device '{device_id}' already exists")
+    config.add_device(category, body)
+    await state_store.register_device(device_id, category, body.get("name", device_id),
+                                       body.get("plugin", ""), body.get("room", ""), body)
+    return {"status": "ok", "device_id": device_id}
+
+
+@app.put("/api/v1/devices/{device_id}", dependencies=[Depends(require_auth)])
+async def update_device_config(device_id: str, body: dict):
+    updated = config.update_device(device_id, body)
+    if not updated:
+        raise HTTPException(404, "Device not found")
+    await state_store.register_device(device_id, updated.get("category", body.get("category", "")),
+                                       updated.get("name", ""), updated.get("plugin", ""),
+                                       updated.get("room", ""), updated)
+    return {"status": "ok", "device": updated}
+
+
+@app.delete("/api/v1/devices/{device_id}", dependencies=[Depends(require_auth)])
+async def delete_device_endpoint(device_id: str):
+    if not config.delete_device(device_id):
+        raise HTTPException(404, "Device not found")
+    return {"status": "ok", "device_id": device_id}
+
+
 # ─── Scenes ──────────────────────────────────────────────
-@app.get("/api/v1/scenes", dependencies=[Depends(verify_auth)])
+@app.get("/api/v1/scenes", dependencies=[Depends(require_auth)])
 async def list_scenes():
     return scene_engine.list_scenes()
 
 
-@app.get("/api/v1/scenes/{scene_name}", dependencies=[Depends(verify_auth)])
+@app.get("/api/v1/scenes/{scene_name}", dependencies=[Depends(require_auth)])
 async def get_scene(scene_name: str):
     scene = scene_engine.get_scene_full(scene_name)
     if not scene:
@@ -209,7 +343,7 @@ async def get_scene(scene_name: str):
     return scene
 
 
-@app.post("/api/v1/scenes", dependencies=[Depends(verify_auth)])
+@app.post("/api/v1/scenes", dependencies=[Depends(require_auth)])
 async def create_scene(body: dict):
     result = await scene_engine.save_scene(body)
     if "error" in result:
@@ -217,7 +351,7 @@ async def create_scene(body: dict):
     return result
 
 
-@app.put("/api/v1/scenes/{scene_name}", dependencies=[Depends(verify_auth)])
+@app.put("/api/v1/scenes/{scene_name}", dependencies=[Depends(require_auth)])
 async def update_scene(scene_name: str, body: dict):
     body["name"] = scene_name
     result = await scene_engine.save_scene(body)
@@ -226,7 +360,7 @@ async def update_scene(scene_name: str, body: dict):
     return result
 
 
-@app.delete("/api/v1/scenes/{scene_name}", dependencies=[Depends(verify_auth)])
+@app.delete("/api/v1/scenes/{scene_name}", dependencies=[Depends(require_auth)])
 async def delete_scene(scene_name: str):
     result = await scene_engine.delete_scene(scene_name)
     if "error" in result:
@@ -234,7 +368,7 @@ async def delete_scene(scene_name: str):
     return result
 
 
-@app.post("/api/v1/scenes/{scene_name}/trigger", dependencies=[Depends(verify_auth)])
+@app.post("/api/v1/scenes/{scene_name}/trigger", dependencies=[Depends(require_auth)])
 async def trigger_scene(scene_name: str, body: dict | None = None):
     scene = scene_engine.get_scene(scene_name)
     if not scene:
@@ -247,7 +381,7 @@ async def trigger_scene(scene_name: str, body: dict | None = None):
 
 
 # ─── Rooms ───────────────────────────────────────────────
-@app.get("/api/v1/rooms", dependencies=[Depends(verify_auth)])
+@app.get("/api/v1/rooms", dependencies=[Depends(require_auth)])
 async def list_rooms():
     rooms_data = {}
     for room_id, room in config.rooms.items():
@@ -260,7 +394,35 @@ async def list_rooms():
     return rooms_data
 
 
-@app.post("/api/v1/rooms/{room_name}/scene", dependencies=[Depends(verify_auth)])
+@app.post("/api/v1/rooms", dependencies=[Depends(require_auth)])
+async def create_room(body: dict):
+    room_id = body.get("id")
+    if not room_id:
+        raise HTTPException(400, "Missing 'id'")
+    if room_id in config.rooms:
+        raise HTTPException(409, f"Room '{room_id}' already exists")
+    room_data = {k: v for k, v in body.items() if k != "id"}
+    room_data.setdefault("devices", [])
+    config.add_room(room_id, room_data)
+    return {"status": "ok", "room_id": room_id}
+
+
+@app.put("/api/v1/rooms/{room_id}", dependencies=[Depends(require_auth)])
+async def update_room(room_id: str, body: dict):
+    updated = config.update_room(room_id, body)
+    if not updated:
+        raise HTTPException(404, "Room not found")
+    return {"status": "ok", "room": updated}
+
+
+@app.delete("/api/v1/rooms/{room_id}", dependencies=[Depends(require_auth)])
+async def delete_room(room_id: str):
+    if not config.delete_room(room_id):
+        raise HTTPException(404, "Room not found")
+    return {"status": "ok", "room_id": room_id}
+
+
+@app.post("/api/v1/rooms/{room_name}/scene", dependencies=[Depends(require_auth)])
 async def room_scene(room_name: str, body: dict):
     scene_name = body.get("scene")
     if not scene_name:
@@ -277,7 +439,7 @@ async def room_scene(room_name: str, body: dict):
 
 
 # ─── Pis ─────────────────────────────────────────────────
-@app.get("/api/v1/pis", dependencies=[Depends(verify_auth)])
+@app.get("/api/v1/pis", dependencies=[Depends(require_auth)])
 async def list_pis():
     pi_plugin = plugin_manager.plugins.get("pi_manager")
     if not pi_plugin:
@@ -290,7 +452,7 @@ async def list_pis():
 
 
 # ─── Energy ──────────────────────────────────────────────
-@app.get("/api/v1/plugs/{device_id}/energy", dependencies=[Depends(verify_auth)])
+@app.get("/api/v1/plugs/{device_id}/energy", dependencies=[Depends(require_auth)])
 async def plug_energy(device_id: str):
     plugin = plugin_manager.get_plugin_for_device(device_id)
     if not plugin:
@@ -456,14 +618,14 @@ async def alexa_endpoint(request: Request):
 
 
 # ─── Jarvis / Alexa ──────────────────────────────────────
-@app.post("/api/v1/jarvis/speak", dependencies=[Depends(verify_auth)])
+@app.post("/api/v1/jarvis/speak", dependencies=[Depends(require_auth)])
 async def jarvis_speak(body: dict):
     text = body.get("text", "")
     await mqtt_client.publish("nexus/jarvis/speak", {"text": text})
     return {"status": "ok", "text": text}
 
 
-@app.post("/api/v1/jarvis/command", dependencies=[Depends(verify_auth)])
+@app.post("/api/v1/jarvis/command", dependencies=[Depends(require_auth)])
 async def jarvis_command(body: dict):
     command_text = body.get("text", "")
     # Parse command and route to appropriate action
@@ -471,25 +633,25 @@ async def jarvis_command(body: dict):
 
 
 # ─── Alerts ──────────────────────────────────────────────
-@app.get("/api/v1/alerts", dependencies=[Depends(verify_auth)])
+@app.get("/api/v1/alerts", dependencies=[Depends(require_auth)])
 async def list_alerts(device: str | None = None, limit: int = 50, unacked: bool = False):
     return await state_store.get_alerts(device_id=device, limit=limit, unacked_only=unacked)
 
 
-@app.post("/api/v1/alerts/{alert_id}/ack", dependencies=[Depends(verify_auth)])
+@app.post("/api/v1/alerts/{alert_id}/ack", dependencies=[Depends(require_auth)])
 async def ack_alert(alert_id: int):
     await state_store.acknowledge_alert(alert_id)
     return {"status": "ok"}
 
 
-@app.post("/api/v1/alerts/ack-all", dependencies=[Depends(verify_auth)])
+@app.post("/api/v1/alerts/ack-all", dependencies=[Depends(require_auth)])
 async def ack_all_alerts():
     await state_store.acknowledge_all_alerts()
     return {"status": "ok"}
 
 
 # ─── Logs ────────────────────────────────────────────────
-@app.get("/api/v1/logs", dependencies=[Depends(verify_auth)])
+@app.get("/api/v1/logs", dependencies=[Depends(require_auth)])
 async def get_logs(level: str = "info", device: str | None = None, limit: int = 100):
     logs = await state_store.get_logs(level=level, device=device, limit=limit)
     return logs

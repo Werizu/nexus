@@ -8,7 +8,7 @@ devices:
       plugin: pc_control
       room: office
       mac_address: "2C:F0:5D:99:03:63"
-      ip: 192.168.178.43
+      ip: 100.123.253.88
       ssh_user: marlon
       ssh_key: "~/.pi-manager/keys/id_rsa"
       vnc_port: 5900
@@ -25,7 +25,7 @@ devices:
     - id: brain
       name: "NEXUS Brain"
       plugin: pi_manager
-      hostname: 192.168.178.202
+      hostname: 100.122.236.58
       ssh_user: marlon
       ssh_key: "~/.pi-manager/keys/id_rsa"
       role: primary
@@ -33,7 +33,7 @@ devices:
     - id: server1
       name: "Server 1"
       plugin: pi_manager
-      hostname: 192.168.178.201
+      hostname: 100.101.4.69
       ssh_user: marlon
       ssh_key: "~/.pi-manager/keys/id_rsa"
       role: secondary
@@ -41,7 +41,7 @@ devices:
     - id: server3
       name: "Server 3"
       plugin: pi_manager
-      hostname: 192.168.178.203
+      hostname: 100.65.139.4
       ssh_user: marlon
       ssh_key: "~/.pi-manager/keys/id_rsa"
       role: secondary

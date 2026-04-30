@@ -2,7 +2,7 @@
 # Run as Administrator: powershell -ExecutionPolicy Bypass -File install.ps1
 
 param(
-    [string]$BrainIP = "192.168.178.202",
+    [string]$BrainIP = "100.122.236.58",
     [int]$MQTTPort = 1883,
     [string]$DeviceID = "main_pc",
     [string]$InstallDir = "$env:ProgramFiles\NEXUS Agent"
