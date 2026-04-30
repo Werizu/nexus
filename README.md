@@ -108,6 +108,41 @@ The agent installs as a Windows service (`NexusAgent`) and auto-connects to the 
 - Alert thresholds (CPU, RAM, disk, GPU temp)
 - Wake-on-LAN support
 
+#### Wake-on-LAN einrichten
+
+Damit der PC über das Dashboard aus dem Schlaf oder ausgeschaltetem Zustand geweckt werden kann, muss WOL im BIOS und in Windows aktiviert sein.
+
+**1. BIOS/UEFI:**
+1. PC neustarten und ins BIOS gehen (meist `DEL`, `F2` oder `F12` beim Hochfahren)
+2. Suche nach **Wake on LAN**, **Wake on PCI(E)**, **Power On By PCI-E** oder **ErP Ready**
+3. Wake on LAN: **Enabled**
+4. ErP Ready / Deep Sleep: **Disabled** (sonst wird der Netzwerkadapter komplett stromlos)
+5. Speichern und neustarten
+
+**2. Windows Netzwerkadapter:**
+1. **Geräte-Manager** öffnen (`devmgmt.msc`)
+2. **Netzwerkadapter** → Rechtsklick auf den Ethernet-Adapter → **Eigenschaften**
+3. Tab **Erweitert**:
+   - *Wake on Magic Packet*: **Enabled**
+   - *Wake on Pattern Match*: **Enabled**
+   - *Energy Efficient Ethernet*: **Disabled** (falls vorhanden)
+4. Tab **Energieverwaltung**:
+   - ☑ *Computer kann das Gerät ausschalten, um Energie zu sparen*
+   - ☑ *Gerät kann den Computer aus dem Ruhezustand aktivieren*
+   - ☑ *Nur Magic Packet kann den Computer aus dem Ruhezustand aktivieren*
+
+**3. Windows Energieoptionen:**
+1. **Einstellungen → System → Netzbetrieb → Schnellstart**: **Aus** (Schnellstart verhindert WOL bei vollständigem Herunterfahren)
+2. Alternativ: PC per `Ruhezustand` oder `Energie sparen` statt `Herunterfahren` ausschalten — WOL funktioniert damit zuverlässiger
+
+**4. MAC-Adresse herausfinden:**
+```powershell
+getmac /v
+```
+Die MAC-Adresse des Ethernet-Adapters (Format `AA-BB-CC-DD-EE-FF`) wird in `config/devices.yaml` als `mac_address` eingetragen.
+
+> **Wichtig:** WOL funktioniert nur über **Ethernet** (Kabel), nicht über WLAN. Der PC muss per LAN-Kabel angeschlossen sein.
+
 ### 4. Agent (macOS)
 
 Run in **Terminal**:
