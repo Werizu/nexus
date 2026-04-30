@@ -215,27 +215,23 @@ Freund an der Uni                  Freundes Netzwerk zuhause
 
 **Hardware:** Raspberry Pi Zero W, Zero 2 W, 3B, oder neuer — alles was Netzwerk hat reicht. Verbrauch: ~0.5-1W (Pi Zero W).
 
-Auf dem **Relay-Pi**:
+**Voraussetzung:** Raspberry Pi OS Lite (headless) ist installiert, SSH ist aktiviert, und der Pi ist per **Ethernet (LAN-Kabel)** am selben Router/Switch wie der PC angeschlossen.
+
+> **Wichtig:** WOL-Broadcasts funktionieren nicht über WLAN. Der Relay-Pi muss per Kabel im selben Netzwerk wie der Ziel-PC sein.
+
+**Setup — ein Befehl auf dem Relay-Pi:**
 
 ```bash
-# 1. Raspberry Pi OS Lite installieren (headless, kein Desktop nötig)
-# 2. SSH aktivieren (ssh-Datei auf Boot-Partition)
-# 3. Ersteinrichtung: User + WLAN/LAN konfigurieren
-
-# 4. Tailscale installieren
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-# Tailscale IP notieren: tailscale ip -4
-
-# 5. wakeonlan installieren
-sudo apt-get update && sudo apt-get install -y wakeonlan
-
-# 6. SSH-Key einrichten (vom Brain aus zugreifen können)
-# Auf dem NEXUS Brain:
-ssh-copy-id -i ~/.ssh/pi_manager_rsa marlon@<relay-tailscale-ip>
+curl -fsSL https://werizu.github.io/nexus/setup-relay.sh | bash
 ```
 
-> **Hinweis:** Der Relay-Pi muss per **Ethernet (LAN-Kabel)** am selben Router/Switch wie der PC des Freundes angeschlossen sein. WOL-Broadcasts funktionieren nicht über WLAN.
+Das Script installiert automatisch Tailscale + `wakeonlan`, prüft die Ethernet-Verbindung, und zeigt am Ende alle nächsten Schritte mit den richtigen IPs an.
+
+**Danach auf dem NEXUS Brain — SSH-Key kopieren:**
+
+```bash
+ssh-copy-id -i ~/.ssh/pi_manager_rsa <user>@<relay-tailscale-ip>
+```
 
 #### Schritt 2: Tailscale-Zugang für den Freund
 
