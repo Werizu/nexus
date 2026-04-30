@@ -150,48 +150,65 @@ Update `config/nexus.yaml` and `config/devices.yaml` to use Tailscale IPs. The d
 
 ### 6. Anderen Benutzer einrichten (Multi-User)
 
-NEXUS unterstützt mehrere Benutzer — z.B. ein Freund, der per RDP auf deinen PC zugreifen soll.
+NEXUS unterstützt mehrere Benutzer — z.B. ein Freund, der seinen eigenen PC von unterwegs per RDP steuern will.
 
 #### Schritt 1: Tailscale-Zugang
 
-Dein Freund braucht Zugang zu deinem Tailscale-Netzwerk, damit er Dashboard und PC erreichen kann.
+Dein Freund braucht Zugang zu deinem Tailscale-Netzwerk, damit er das Dashboard (auf dem Pi) und seinen eigenen PC erreichen kann.
 
 1. Öffne [Tailscale Admin Console](https://login.tailscale.com/admin/users)
 2. Gehe zu **Users → Invite users**
 3. Gib die E-Mail deines Freundes ein und sende die Einladung
-4. Dein Freund installiert Tailscale auf seinem Mac/PC und meldet sich mit der Einladung an
-5. Sein Gerät ist jetzt Teil deines Tailnets und kann alle Geräte (Pi, PC) direkt erreichen
+4. Dein Freund installiert Tailscale auf **beiden** Geräten:
+   - Seinem **Mac/Laptop** (von dem er zugreift)
+   - Seinem **Windows-PC** (der ferngesteuert werden soll)
+5. Er meldet sich auf beiden mit der Einladung an — beide sind jetzt im Tailnet
 
 > **Tailscale Free** erlaubt bis zu 3 Benutzer und 100 Geräte — mehr als genug.
 
-#### Schritt 2: NEXUS-Account anlegen
+#### Schritt 2: PC des Freundes vorbereiten
 
-1. Öffne das Dashboard unter `http://<tailscale-ip>`
-2. Melde dich als Admin an
-3. Klicke auf das **Zahnrad-Icon** (oben rechts) → **Benutzerverwaltung**
-4. Klicke **+ Neuer Benutzer**
-5. Vergib Benutzername, Anzeigename, Passwort und Rolle (`user` reicht)
-6. Teile die Zugangsdaten mit deinem Freund
+Auf dem **Windows-PC deines Freundes**:
 
-#### Schritt 3: Windows-Benutzer für RDP (optional)
+1. **Tailscale installieren** und mit der Einladung anmelden
+2. **Remotedesktop aktivieren**: Einstellungen → System → Remotedesktop → An
+3. **NEXUS Agent installieren** (elevated PowerShell):
+   ```powershell
+   $env:NEXUS_BRAIN="<tailscale-ip-des-pi>"; irm https://werizu.github.io/nexus/install.ps1 | iex
+   ```
+   Dabei eine eigene `device_id` vergeben (z.B. `friends_pc`)
+4. **Tailscale IP notieren**: `tailscale ip -4` → z.B. `100.x.x.x`
 
-Wenn zwei Personen gleichzeitig per RDP auf den PC zugreifen sollen, braucht jeder einen eigenen Windows-Benutzer:
+#### Schritt 3: PC im NEXUS-Dashboard registrieren
 
-1. Auf dem Windows-PC: **Einstellungen → Konten → Familie & andere Benutzer → Konto hinzufügen**
-2. Neuen lokalen Account erstellen
-3. Unter **Einstellungen → System → Remotedesktop**: den neuen Benutzer zu den erlaubten Remote-Benutzern hinzufügen
-4. Dein Freund verbindet sich per RDP mit seinem eigenen Windows-Login
+1. Melde dich als Admin im Dashboard an
+2. Gehe zu **Geräte → + Neues Gerät**
+3. Kategorie: **Computer**, Plugin: **pc_control**
+4. Trage ein:
+   - Name: z.B. "Freund PC"
+   - Device ID: `friends_pc` (muss zur Agent-Config passen)
+   - IP: Tailscale-IP des PCs
+   - MAC-Adresse: für Wake-on-LAN
+   - OS: `windows`
+5. Speichern
 
-> **Hinweis:** Standardmäßig erlaubt Windows nur eine aktive RDP-Sitzung gleichzeitig. Für gleichzeitige Nutzung wird ein RDP-Wrapper oder Windows Server benötigt.
+#### Schritt 4: NEXUS-Account für den Freund anlegen
+
+1. Dashboard → **Zahnrad-Icon** (oben rechts) → **Benutzerverwaltung**
+2. **+ Neuer Benutzer** → Benutzername, Passwort, Rolle (`user`)
+3. Zugangsdaten dem Freund mitteilen
+
+Dein Freund kann sich jetzt unter `http://<tailscale-ip-des-pi>` einloggen und seinen eigenen PC starten, steuern und per RDP verbinden.
 
 #### Zusammenfassung
 
 | Was | Wo |
 |---|---|
 | Tailscale einladen | [admin.tailscale.com](https://login.tailscale.com/admin/users) → Invite |
+| Agent auf Freund-PC | PowerShell Installer mit eigener device_id |
+| PC registrieren | Dashboard → Geräte → + Neues Gerät |
 | NEXUS-Account anlegen | Dashboard → Zahnrad → + Neuer Benutzer |
-| Windows-User für RDP | Windows Einstellungen → Konten |
-| Dashboard-Zugang | `http://<tailscale-ip>` im Browser |
+| Dashboard-Zugang | `http://<tailscale-ip-des-pi>` im Browser |
 
 ## Configuration
 
