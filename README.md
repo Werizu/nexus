@@ -54,142 +54,162 @@ Self-hosted Smart Home System — runs on a Raspberry Pi, controls lights, plugs
 
 ## Installation
 
+Reihenfolge ist wichtig — jeder Schritt baut auf dem vorherigen auf. Bereits erledigte Schritte überspringen.
+
 ### 1. Brain (Raspberry Pi)
 
+Der Brain ist das Herzstück — er muss zuerst laufen.
+
 ```bash
-# Clone the repo
+# Repo klonen
 git clone https://github.com/Werizu/nexus.git
 cd nexus
 
-# Configure your devices
+# Config anpassen
 cp config/secrets.yaml.example config/secrets.yaml
-nano config/devices.yaml    # Add your devices (lights, plugs, PCs, Pis)
-nano config/secrets.yaml    # Add API keys (Hue bridge key, etc.)
-nano config/nexus.yaml      # Set MQTT broker IP, system settings
+nano config/devices.yaml    # Geräte eintragen (Lichter, Plugs, PCs, Pis)
+nano config/secrets.yaml    # API-Keys (Hue Bridge Key, etc.)
+nano config/nexus.yaml      # MQTT Broker IP, System-Einstellungen
 
-# Build and start
+# Bauen und starten
 sudo docker compose up -d
 ```
 
-The Brain starts three containers:
-- `nexus-brain` — FastAPI backend on port 8000
-- `nexus-mqtt` — Mosquitto broker on port 1883
-- `nexus-web` — Nginx serving the dashboard on port 80
+Es starten drei Container:
+- `nexus-brain` — FastAPI Backend auf Port 8000
+- `nexus-mqtt` — Mosquitto Broker auf Port 1883
+- `nexus-web` — Nginx Dashboard auf Port 80
 
-### 2. Dashboard
+### 2. Tailscale (Fernzugriff)
 
-Open `http://<pi-ip>` in your browser. On first launch, a default admin user is created:
+Tailscale wird **vor** den Agents installiert, weil die Agents die Tailscale-IP des Brain brauchen.
+
+```bash
+# Auf dem Brain-Pi
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+
+# Tailscale IP notieren — wird für alles Weitere gebraucht
+tailscale ip -4
+```
+
+`config/nexus.yaml` und `config/devices.yaml` auf Tailscale-IPs umstellen. Danach Brain neustarten:
+
+```bash
+sudo docker compose restart nexus-brain
+```
+
+Tailscale auch auf allen anderen Geräten installieren (PCs, MacBooks, Handys), die auf das Dashboard zugreifen sollen.
+
+> **Ohne Tailscale** funktioniert alles nur im lokalen Netzwerk — Agents können dann die lokale IP des Brain nutzen.
+
+### 3. Dashboard
+
+Dashboard im Browser öffnen: `http://<tailscale-ip>` (oder `http://<lokale-ip>` ohne Tailscale).
+
+Beim ersten Start wird ein Admin-Account erstellt:
 
 - **Username:** `admin`
 - **Password:** `nexus`
 
-**Change your password immediately** via the settings icon (gear icon, top right).
+**Passwort sofort ändern** über das Zahnrad-Icon oben rechts.
 
-### 3. Agent (Windows PC)
+### 4. Windows PC einrichten
 
-Run in an **elevated PowerShell**:
+Reihenfolge auf dem PC: zuerst Tailscale, dann WOL, dann Agent.
 
+**4a) Tailscale installieren:**
+
+1. [tailscale.com/download](https://tailscale.com/download) → Windows Installer
+2. Installieren und anmelden
+3. **Run unattended** aktivieren (Tailscale-Einstellungen) — damit Tailscale nach Neustart automatisch verbindet
+4. Tailscale-IP notieren: Rechtsklick auf Tailscale-Icon → *My IP address*
+
+**4b) Wake-on-LAN einrichten:**
+
+Damit der PC über das Dashboard aus dem ausgeschalteten Zustand geweckt werden kann.
+
+**BIOS/UEFI:**
+1. PC neustarten → ins BIOS (`DEL`, `F2` oder `F12`)
+2. **Wake on LAN** / **Wake on PCI(E)**: **Enabled**
+3. **ErP Ready** / **Deep Sleep**: **Disabled**
+4. Speichern und neustarten
+
+**Windows Netzwerkadapter:**
+1. **Geräte-Manager** (`devmgmt.msc`) → **Netzwerkadapter** → Rechtsklick Ethernet-Adapter → **Eigenschaften**
+2. Tab **Erweitert**:
+   - *Wake on Magic Packet*: **Enabled**
+   - *Wake on Pattern Match*: **Enabled**
+   - *Energy Efficient Ethernet*: **Disabled** (falls vorhanden)
+3. Tab **Energieverwaltung**:
+   - ☑ *Gerät kann den Computer aus dem Ruhezustand aktivieren*
+   - ☑ *Nur Magic Packet kann den Computer aus dem Ruhezustand aktivieren*
+
+**Windows Energieoptionen:**
+- **Einstellungen → System → Netzbetrieb → Schnellstart**: **Aus** (blockiert WOL bei Herunterfahren)
+
+**MAC-Adresse notieren:**
+```powershell
+getmac /v
+```
+MAC-Adresse des **Ethernet-Adapters** aufschreiben — wird in `devices.yaml` als `mac_address` eingetragen.
+
+> **Wichtig:** WOL funktioniert nur über **Ethernet** (Kabel), nicht über WLAN.
+
+**4c) Remotedesktop aktivieren:**
+
+**Einstellungen → System → Remotedesktop → An**
+
+**4d) NEXUS Agent installieren:**
+
+In einer **erhöhten PowerShell** (Rechtsklick → Als Administrator):
+
+```powershell
+$env:NEXUS_BRAIN="<tailscale-ip-des-brain>"; irm https://werizu.github.io/nexus/install.ps1 | iex
+```
+
+Ohne Tailscale (nur lokales Netz):
 ```powershell
 irm https://werizu.github.io/nexus/install.ps1 | iex
 ```
 
-Or with a custom Brain IP:
+Der Agent installiert sich als Windows-Service (`NexusAgent`) und verbindet sich automatisch per MQTT mit dem Brain.
 
-```powershell
-$env:NEXUS_BRAIN="100.122.236.58"; irm https://werizu.github.io/nexus/install.ps1 | iex
+**4e) Neustart und prüfen:**
+
+PC neustarten. Prüfen:
+- Tailscale verbindet automatisch (Icon grün)
+- Agent läuft: `Get-Service NexusAgent`
+- Dashboard zeigt den PC als online
+
+**Agent-Funktionen:** System-Metriken (CPU, RAM, GPU, Disk, Netzwerk), Remote Shutdown/Restart/Sleep/Lock, Prozessverwaltung, Alerts bei Schwellwerten.
+
+### 5. macOS Agent (optional)
+
+Nur nötig wenn das MacBook auch über NEXUS gesteuert werden soll (Apps öffnen, RDP, etc.).
+
+**Zuerst Tailscale installieren** ([tailscale.com/download](https://tailscale.com/download) → macOS), dann:
+
+```bash
+NEXUS_BRAIN="<tailscale-ip-des-brain>" curl -fsSL https://werizu.github.io/nexus/install-mac.sh | bash
 ```
 
-The agent installs as a Windows service (`NexusAgent`) and auto-connects to the Brain via MQTT.
-
-**Agent capabilities:**
-- System metrics (CPU, RAM, GPU, disk, network)
-- Remote commands (shutdown, restart, sleep, lock)
-- Process management (list, kill)
-- Alert thresholds (CPU, RAM, disk, GPU temp)
-- Wake-on-LAN support
-
-#### Wake-on-LAN einrichten
-
-Damit der PC über das Dashboard aus dem Schlaf oder ausgeschaltetem Zustand geweckt werden kann, muss WOL im BIOS und in Windows aktiviert sein.
-
-**1. BIOS/UEFI:**
-1. PC neustarten und ins BIOS gehen (meist `DEL`, `F2` oder `F12` beim Hochfahren)
-2. Suche nach **Wake on LAN**, **Wake on PCI(E)**, **Power On By PCI-E** oder **ErP Ready**
-3. Wake on LAN: **Enabled**
-4. ErP Ready / Deep Sleep: **Disabled** (sonst wird der Netzwerkadapter komplett stromlos)
-5. Speichern und neustarten
-
-**2. Windows Netzwerkadapter:**
-1. **Geräte-Manager** öffnen (`devmgmt.msc`)
-2. **Netzwerkadapter** → Rechtsklick auf den Ethernet-Adapter → **Eigenschaften**
-3. Tab **Erweitert**:
-   - *Wake on Magic Packet*: **Enabled**
-   - *Wake on Pattern Match*: **Enabled**
-   - *Energy Efficient Ethernet*: **Disabled** (falls vorhanden)
-4. Tab **Energieverwaltung**:
-   - ☑ *Computer kann das Gerät ausschalten, um Energie zu sparen*
-   - ☑ *Gerät kann den Computer aus dem Ruhezustand aktivieren*
-   - ☑ *Nur Magic Packet kann den Computer aus dem Ruhezustand aktivieren*
-
-**3. Windows Energieoptionen:**
-1. **Einstellungen → System → Netzbetrieb → Schnellstart**: **Aus** (Schnellstart verhindert WOL bei vollständigem Herunterfahren)
-2. Alternativ: PC per `Ruhezustand` oder `Energie sparen` statt `Herunterfahren` ausschalten — WOL funktioniert damit zuverlässiger
-
-**4. MAC-Adresse herausfinden:**
-```powershell
-getmac /v
-```
-Die MAC-Adresse des Ethernet-Adapters (Format `AA-BB-CC-DD-EE-FF`) wird in `config/devices.yaml` als `mac_address` eingetragen.
-
-> **Wichtig:** WOL funktioniert nur über **Ethernet** (Kabel), nicht über WLAN. Der PC muss per LAN-Kabel angeschlossen sein.
-
-### 4. Agent (macOS)
-
-Run in **Terminal**:
-
+Ohne Tailscale (nur lokales Netz):
 ```bash
 curl -fsSL https://werizu.github.io/nexus/install-mac.sh | bash
 ```
 
-Or with a custom Brain IP:
+Der Agent installiert sich als LaunchAgent und startet automatisch beim Login.
 
-```bash
-NEXUS_BRAIN="100.122.236.58" curl -fsSL https://werizu.github.io/nexus/install-mac.sh | bash
-```
-
-The agent installs as a LaunchAgent and auto-starts on login.
-
-**Agent capabilities:**
-- System metrics (CPU, RAM, disk, network)
-- Open apps, URLs, SSH terminals
-- RDP connections (via Windows App)
-- Volume and brightness control
-- Dark mode toggle
-- Screenshots
-- Notifications
-
-### 5. Tailscale (Remote Access)
-
-Install [Tailscale](https://tailscale.com) on all devices (Pi, PCs, phones) for secure remote access without port forwarding.
-
-```bash
-# On the Pi
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-
-# Note your Tailscale IP (100.x.x.x)
-tailscale ip -4
-```
-
-Update `config/nexus.yaml` and `config/devices.yaml` to use Tailscale IPs. The dashboard is then accessible from anywhere via `http://<tailscale-ip>`.
+**Agent-Funktionen:** Apps/URLs öffnen, RDP-Verbindungen (Windows App), SSH-Terminals, Lautstärke, Helligkeit, Dark Mode, Screenshots, System-Metriken.
 
 ### 6. Zweiten Benutzer einrichten (Komplett-Anleitung)
 
-Komplette Schritt-für-Schritt-Anleitung, um einen Freund einzurichten — von Null. Er hat ein MacBook, einen Desktop-PC und bekommt einen Raspberry Pi als WOL-Relay. Ziel: Er kann seinen PC von überall (Uni, unterwegs) über das NEXUS-Dashboard aufwecken und per RDP steuern.
+Komplette Anleitung um einen Freund einzurichten — von Null. Er hat ein MacBook ohne alles, einen Desktop-PC ohne alles, und bekommt einen Raspberry Pi als WOL-Relay. Ziel: Er kann seinen PC von überall (Uni, unterwegs) über das NEXUS-Dashboard aufwecken und per RDP steuern.
 
-> **Voraussetzung:** NEXUS Brain läuft bereits auf deinem Pi. Falls nicht, zuerst [Schritt 1: Brain](#1-brain-raspberry-pi) und [Schritt 5: Tailscale](#5-tailscale-remote-access) abschließen.
+> **Voraussetzung:** NEXUS Brain läuft bereits auf deinem Pi mit Tailscale. Falls nicht, zuerst [Schritt 1: Brain](#1-brain-raspberry-pi) und [Schritt 5: Tailscale](#5-tailscale-remote-access) abschließen.
 
-#### Übersicht: Was wird wo gemacht?
+#### Übersicht
 
 ```
 Freund an der Uni                  Freundes Netzwerk zuhause
@@ -216,67 +236,152 @@ Freund an der Uni                  Freundes Netzwerk zuhause
 
 ---
 
-#### Schritt 1: Tailscale — Freund einladen
+#### Vorbereitung (von zuhause aus)
 
-Damit alle Geräte sich sehen können, muss dein Freund in dein Tailscale-Netzwerk eingeladen werden.
+Bevor du zum Freund fährst — diese Schritte kannst du vorher erledigen:
 
-**Auf deinem Rechner / Handy:**
+**Tailscale-Einladung senden:**
 
 1. Öffne [Tailscale Admin Console](https://login.tailscale.com/admin/users)
 2. **Users → Invite users**
 3. E-Mail deines Freundes eingeben, Einladung senden
+4. Dein Freund soll die Einladung **annehmen und einen Tailscale-Account erstellen** (er muss noch nichts installieren)
 
 > **Tailscale Free** erlaubt bis zu 3 Benutzer und 100 Geräte.
 
-Dein Freund bekommt eine E-Mail mit dem Einladungslink. Er muss sich **nicht** sofort anmelden — die Einladung bleibt aktiv.
+**NEXUS-Account anlegen:**
 
----
+1. Dashboard öffnen: `http://<tailscale-ip-des-brain>`
+2. Als Admin einloggen
+3. **Zahnrad-Icon** (oben rechts) → **Benutzerverwaltung**
+4. **+ Neuer Benutzer**: Benutzername, Anzeigename, temporäres Passwort, Rolle `user`
 
-#### Schritt 2: Relay-Pi einrichten
-
-Der Relay-Pi steht beim Freund zuhause, ist per **LAN-Kabel** am Router angeschlossen und leitet WOL-Pakete an den PC weiter. Auf dem Pi läuft keine NEXUS-Software — nur Tailscale und `wakeonlan`.
-
-**Hardware:** Raspberry Pi Zero W, Zero 2 W, 3B oder neuer. Alles was Ethernet hat reicht. Verbrauch: ~0.5W (Pi Zero W).
-
-> **Wichtig:** Der Relay-Pi **muss per LAN-Kabel** am selben Router/Switch wie der PC angeschlossen sein. WOL funktioniert nicht über WLAN.
-
-**2a) Pi OS flashen:**
+**Relay-Pi vorbereiten:**
 
 1. [Raspberry Pi Imager](https://www.raspberrypi.com/software/) herunterladen
 2. **Raspberry Pi OS Lite (64-bit)** auswählen (kein Desktop nötig)
 3. Vor dem Schreiben auf das Zahnrad klicken:
    - **SSH aktivieren** (Passwort-Authentifizierung)
    - **Benutzername + Passwort** setzen (z.B. `marlon` / eigenes Passwort)
-   - **WLAN konfigurieren** (für den ersten Zugang, falls kein Bildschirm vorhanden)
-4. SD-Karte flashen und in den Pi einlegen
+   - **WLAN konfigurieren** (WLAN des Freundes, damit man beim ersten Boot per SSH draufkommt)
+4. SD-Karte flashen — mitnehmen
 
-**2b) Pi anschließen:**
+---
 
-1. LAN-Kabel an den Router des Freundes
-2. Strom anschließen
-3. Warten bis er hochgefahren ist (~1-2 Minuten)
+#### Beim Freund: Schritt 1 — Relay-Pi aufsetzen
 
-**2c) Per SSH verbinden und Setup ausführen:**
+Der Pi wird als Erstes eingerichtet, weil er am längsten braucht (Updates, Tailscale).
+
+> **Wichtig:** Der Relay-Pi **muss per LAN-Kabel** am selben Router/Switch wie der PC angeschlossen sein. WOL funktioniert nicht über WLAN.
+
+1. SD-Karte einlegen, **LAN-Kabel an den Router**, Strom anschließen
+2. Warten bis hochgefahren (~1-2 Minuten)
+3. IP herausfinden (im Router unter "Verbundene Geräte" oder per `ping raspberrypi.local`)
+4. Per SSH verbinden und Setup-Script ausführen:
 
 ```bash
-# IP herausfinden (z.B. im Router unter "Verbundene Geräte" schauen)
 ssh marlon@<lokale-ip-des-pi>
-
-# Auf dem Pi: Setup-Script ausführen
 curl -fsSL https://werizu.github.io/nexus/setup-relay.sh | bash
 ```
 
-Das Script:
-- Prüft ob Ethernet angeschlossen ist
-- Installiert `wakeonlan`
-- Installiert Tailscale und zeigt einen Login-Link
-- Zeigt am Ende alle nächsten Schritte mit den richtigen IPs
+Das Script installiert `wakeonlan` + Tailscale und zeigt einen Login-Link. Diesen im Browser öffnen und mit **deinem** Tailscale-Account anmelden (der Pi gehört zu deinem Netzwerk).
 
-**2d) Tailscale auf dem Relay-Pi anmelden:**
+**Tailscale-IP des Relay-Pi notieren** — wird in Schritt 4 gebraucht.
 
-Beim Setup wird ein Link angezeigt — diesen im Browser öffnen und mit **deinem** Tailscale-Account anmelden (der Pi gehört zu deinem Netzwerk, nicht zum Account deines Freundes).
+> Während der Pi Updates installiert, kannst du parallel mit Schritt 2 (PC) weitermachen.
 
-**2e) SSH-Key vom Brain kopieren (auf deinem Brain-Pi):**
+---
+
+#### Beim Freund: Schritt 2 — Desktop-PC einrichten
+
+**2a) Wake-on-LAN im BIOS aktivieren:**
+
+1. PC neustarten → ins BIOS (`DEL`, `F2` oder `F12`)
+2. **Wake on LAN** / **Wake on PCI(E)**: **Enabled**
+3. **ErP Ready** / **Deep Sleep**: **Disabled**
+4. Speichern und neustarten
+
+**2b) Wake-on-LAN in Windows aktivieren:**
+
+1. **Geräte-Manager** (`devmgmt.msc`) → **Netzwerkadapter** → Rechtsklick Ethernet-Adapter → **Eigenschaften**
+2. Tab **Erweitert**:
+   - *Wake on Magic Packet*: **Enabled**
+   - *Wake on Pattern Match*: **Enabled**
+   - *Energy Efficient Ethernet*: **Disabled** (falls vorhanden)
+3. Tab **Energieverwaltung**:
+   - ☑ *Gerät kann den Computer aus dem Ruhezustand aktivieren*
+   - ☑ *Nur Magic Packet kann den Computer aus dem Ruhezustand aktivieren*
+4. **Einstellungen → System → Netzbetrieb → Schnellstart**: **Aus**
+
+**2c) MAC-Adresse notieren:**
+
+```powershell
+getmac /v
+```
+
+MAC-Adresse des **Ethernet-Adapters** aufschreiben (Format `AA-BB-CC-DD-EE-FF`).
+
+> WOL funktioniert nur über **Ethernet** (Kabel), nicht über WLAN.
+
+**2d) Tailscale installieren:**
+
+1. [tailscale.com/download](https://tailscale.com/download) → Windows Installer herunterladen und installieren
+2. Mit dem **Account deines Freundes** anmelden (er hat die Einladung in der Vorbereitung angenommen)
+3. Tailscale-Einstellungen: **Run unattended** aktivieren
+4. **Tailscale-IP notieren**: Rechtsklick auf Tailscale-Icon → *My IP address*
+
+**2e) Remotedesktop aktivieren:**
+
+**Einstellungen → System → Remotedesktop → An**
+
+**2f) NEXUS Agent installieren:**
+
+Jetzt ist Tailscale aktiv und du kennst die Brain-IP. In einer **erhöhten PowerShell** (Rechtsklick → Als Administrator):
+
+```powershell
+$env:NEXUS_BRAIN="<tailscale-ip-des-brain>"; irm https://werizu.github.io/nexus/install.ps1 | iex
+```
+
+Bei der Abfrage `device_id` eingeben: z.B. `friends_pc`
+
+**2g) Neustart und prüfen:**
+
+PC einmal neu starten. Prüfen ob:
+- Tailscale automatisch verbindet (Icon grün)
+- NEXUS Agent läuft: `Get-Service NexusAgent`
+
+---
+
+#### Beim Freund: Schritt 3 — MacBook einrichten
+
+**3a) Tailscale installieren:**
+
+1. [tailscale.com/download](https://tailscale.com/download) → macOS herunterladen und installieren
+2. Mit dem **Account deines Freundes** anmelden
+
+**3b) Windows App installieren (für RDP):**
+
+1. App Store → **Windows App** (von Microsoft) installieren
+2. Neue Verbindung hinzufügen:
+   - IP: **Tailscale-IP des PCs** (aus Schritt 2d)
+   - Benutzer: Windows-Login des PCs
+3. Verbindung speichern
+
+**3c) Dashboard testen:**
+
+1. Browser öffnen: `http://<tailscale-ip-des-brain>`
+2. Mit dem NEXUS-Account einloggen (aus der Vorbereitung)
+3. Dashboard sollte laden und Geräte anzeigen
+
+> Das MacBook braucht keinen NEXUS Agent — nur Tailscale, Windows App und den Browser.
+
+---
+
+#### Zuhause: Schritt 4 — Geräte in NEXUS registrieren
+
+Zurück an deinem Rechner — Relay-Pi und PC des Freundes in NEXUS eintragen.
+
+**4a) SSH-Key zum Relay-Pi kopieren:**
 
 ```bash
 ssh-copy-id -i ~/.ssh/pi_manager_rsa marlon@<relay-tailscale-ip>
@@ -287,55 +392,9 @@ Testen:
 ssh -i ~/.ssh/pi_manager_rsa marlon@<relay-tailscale-ip> "echo OK"
 ```
 
----
+**4b) Geräte registrieren:**
 
-#### Schritt 3: Desktop-PC des Freundes einrichten
-
-**3a) Wake-on-LAN aktivieren:**
-
-Siehe [Wake-on-LAN einrichten](#wake-on-lan-einrichten) weiter oben — BIOS, Netzwerkadapter und Energieoptionen konfigurieren.
-
-**3b) MAC-Adresse notieren:**
-
-```powershell
-getmac /v
-```
-
-Die MAC-Adresse des **Ethernet-Adapters** notieren (Format `AA-BB-CC-DD-EE-FF`).
-
-**3c) Tailscale installieren:**
-
-1. [tailscale.com/download](https://tailscale.com/download) → Windows Installer herunterladen
-2. Installieren und mit der **Einladung deines Freundes** anmelden
-3. In den Tailscale-Einstellungen: **Run unattended** aktivieren (damit Tailscale nach Neustart automatisch verbindet)
-4. Tailscale IP notieren: Rechtsklick auf Tailscale-Icon → **My IP address**
-
-**3d) Remotedesktop aktivieren:**
-
-1. **Einstellungen → System → Remotedesktop → An**
-2. PC-Name notieren (wird für die RDP-Verbindung gebraucht)
-
-**3e) NEXUS Agent installieren:**
-
-In einer **erhöhten PowerShell** (Rechtsklick → Als Administrator):
-
-```powershell
-$env:NEXUS_BRAIN="<tailscale-ip-des-brain>"; irm https://werizu.github.io/nexus/install.ps1 | iex
-```
-
-Bei der Abfrage `device_id` eingeben: z.B. `friends_pc`
-
-**3f) Testen:**
-
-PC einmal neu starten. Prüfen ob:
-- Tailscale automatisch verbindet (Icon grün)
-- NEXUS Agent läuft: `Get-Service NexusAgent`
-
----
-
-#### Schritt 4: Relay-Pi und PC in NEXUS registrieren
-
-**Auf deinem Rechner** — Geräte in `config/devices.yaml` eintragen:
+Über das Dashboard (Geräte → + Neues Gerät) oder in `config/devices.yaml`:
 
 ```yaml
 pis:
@@ -351,63 +410,27 @@ computers:
   - id: friends_pc
     name: "Freund PC"
     plugin: pc_control
-    mac_address: "AA:BB:CC:DD:EE:FF"  # MAC aus Schritt 3b
-    ip: 100.x.x.x                     # Tailscale IP aus Schritt 3c
+    mac_address: "AA:BB:CC:DD:EE:FF"  # MAC aus Schritt 2c
+    ip: 100.x.x.x                     # Tailscale IP aus Schritt 2d
     os: windows
     check_port: 3389
-    wol_relay: relay_friend            # WOL wird über den Relay-Pi gesendet
+    wol_relay: relay_friend            # WOL über den Relay-Pi senden
 ```
 
 Das `wol_relay` Feld sagt dem Brain: "Sende WOL nicht lokal, sondern per SSH über den Relay-Pi."
 
-Alternativ: Geräte können auch über das Dashboard registriert werden (Geräte → + Neues Gerät).
-
-Danach Brain neu deployen oder neustarten, damit die Config geladen wird.
+Bei Änderung per `devices.yaml`: Brain neustarten damit die Config geladen wird.
 
 ---
 
-#### Schritt 5: MacBook des Freundes einrichten
+#### Schritt 5 — Komplett-Test
 
-**5a) Tailscale installieren:**
+Jetzt alles zusammen testen:
 
-1. [tailscale.com/download](https://tailscale.com/download) → macOS herunterladen
-2. Installieren und mit der **Einladung des Freundes** anmelden
-
-**5b) Windows App installieren (für RDP):**
-
-1. App Store → **Windows App** (von Microsoft) installieren
-2. Neue Verbindung hinzufügen:
-   - IP: Tailscale-IP des PCs (aus Schritt 3c)
-   - Benutzer: Windows-Login des PCs
-3. Verbindung speichern
-
-Das MacBook braucht keinen NEXUS Agent — der Freund nutzt nur das Dashboard im Browser und die Windows App für RDP.
-
----
-
-#### Schritt 6: NEXUS-Account für den Freund anlegen
-
-1. Dashboard öffnen: `http://<tailscale-ip-des-brain>`
-2. Als Admin einloggen
-3. **Zahnrad-Icon** (oben rechts) → **Benutzerverwaltung**
-4. **+ Neuer Benutzer**:
-   - Benutzername: z.B. `freund`
-   - Anzeigename: Vorname
-   - Passwort: ein temporäres Passwort (Freund ändert es selbst)
-   - Rolle: `user`
-5. Zugangsdaten dem Freund mitteilen
-
----
-
-#### Schritt 7: Testen
-
-Jetzt sollte alles funktionieren. Reihenfolge zum Testen:
-
-1. **PC des Freundes herunterfahren**
-2. **Am MacBook des Freundes:**
+1. **PC des Freundes herunterfahren** (oder er fährt ihn selbst runter)
+2. **Am MacBook des Freundes** (oder deinem Rechner):
    - `http://<tailscale-ip-des-brain>` öffnen
-   - Mit dem neuen Account einloggen
-   - "Freund PC" suchen → **Wake** klicken
+   - Einloggen → "Freund PC" → **Wake** klicken
 3. **Was passiert:**
    - Brain erkennt `wol_relay: relay_friend`
    - Brain verbindet sich per SSH zum Relay-Pi
@@ -420,12 +443,13 @@ Jetzt sollte alles funktionieren. Reihenfolge zum Testen:
 
 | Problem | Ursache | Lösung |
 |---|---|---|
-| PC wacht nicht auf | WOL nicht im BIOS aktiviert | [WOL einrichten](#wake-on-lan-einrichten) prüfen |
-| PC wacht nicht auf | Pi nicht per LAN-Kabel | Relay-Pi per Ethernet anschließen |
+| PC wacht nicht auf | WOL nicht im BIOS aktiviert | Schritt 2a prüfen |
+| PC wacht nicht auf | Relay-Pi nicht per LAN-Kabel | Relay-Pi per Ethernet anschließen |
+| PC wacht nicht auf | Schnellstart aktiv | Schritt 2b: Schnellstart deaktivieren |
 | Dashboard nicht erreichbar | Tailscale nicht verbunden | Tailscale-App öffnen, Status prüfen |
-| "WOL relay device not found" | Relay-Pi nicht in devices.yaml | Config prüfen, Brain neustarten |
+| "WOL relay device not found" | Relay-Pi nicht registriert | Schritt 4b prüfen, Brain neustarten |
 | Agent meldet sich nicht | Agent-Service nicht gestartet | `Get-Service NexusAgent` prüfen |
-| RDP verbindet nicht | Remotedesktop nicht aktiviert | Windows Einstellungen prüfen |
+| RDP verbindet nicht | Remotedesktop nicht aktiviert | Schritt 2e prüfen |
 
 ## Configuration
 
