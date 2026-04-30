@@ -20,6 +20,7 @@ except ImportError:
 BRAIN_URL = "http://100.122.236.58:8000"
 WS_URL = "ws://100.122.236.58:8000/ws/realtime"
 API_BASE = f"{BRAIN_URL}/api/v1"
+AUTH_TOKEN = None
 
 # ─── ANSI Colors ─────────────────────────────────────────
 GREEN = "\033[32m"
@@ -57,6 +58,43 @@ ACTION_LABELS = {
     "jarvis.speak": "Jarvis spricht",
     "wait": "Warte",
 }
+
+
+def _load_auth_token() -> str | None:
+    """Load JWT token from the Mac agent config or login with stored credentials."""
+    import os
+    config_path = os.path.expanduser("~/.nexus-agent/config.yaml")
+    try:
+        import yaml
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        return None
+
+    token = cfg.get("auth", {}).get("token")
+    if token:
+        return token
+
+    # No token yet — try to login with stored credentials
+    auth = cfg.get("auth", {})
+    username = auth.get("username", "")
+    password = auth.get("password", "")
+    if not username or not password:
+        return None
+
+    try:
+        data = json.dumps({"username": username, "password": password}).encode()
+        req = urllib.request.Request(
+            f"{API_BASE}/auth/login",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read())
+            return result.get("token")
+    except Exception:
+        return None
 
 
 def action_label(action: dict) -> str:
@@ -125,12 +163,25 @@ def group_consecutive_actions(actions: list[dict]) -> list[dict]:
 
 
 # ─── API helpers ─────────────────────────────────────────
+def _auth_headers() -> dict:
+    headers = {}
+    if AUTH_TOKEN:
+        headers["Authorization"] = f"Bearer {AUTH_TOKEN}"
+    return headers
+
+
 def api_get(path: str) -> dict:
     """GET request to NEXUS Brain API."""
-    req = urllib.request.Request(f"{API_BASE}{path}")
+    req = urllib.request.Request(f"{API_BASE}{path}", headers=_auth_headers())
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            print(f"\n{RED}Fehler:{RESET} Nicht authentifiziert. Agent-Config pruefen (~/.nexus-agent/config.yaml)")
+            sys.exit(1)
+        print(f"\n{RED}Fehler:{RESET} API-Fehler {e.code}: {e.reason}")
+        sys.exit(1)
     except urllib.error.URLError as e:
         print(f"\n{RED}Fehler:{RESET} Brain nicht erreichbar: {e}")
         sys.exit(1)
@@ -139,15 +190,22 @@ def api_get(path: str) -> dict:
 def api_post(path: str, body: dict | None = None) -> dict:
     """POST request to NEXUS Brain API."""
     data = json.dumps(body or {}).encode()
+    headers = {"Content-Type": "application/json", **_auth_headers()}
     req = urllib.request.Request(
         f"{API_BASE}{path}",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=300) as resp:
             return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            print(f"\n{RED}Fehler:{RESET} Nicht authentifiziert. Agent-Config pruefen (~/.nexus-agent/config.yaml)")
+            sys.exit(1)
+        print(f"\n{RED}Fehler:{RESET} API-Fehler {e.code}: {e.reason}")
+        sys.exit(1)
     except urllib.error.URLError as e:
         print(f"\n{RED}Fehler:{RESET} API-Aufruf fehlgeschlagen: {e}")
         sys.exit(1)
@@ -498,6 +556,12 @@ def main():
         BRAIN_URL = f"http://{args.host}"
         WS_URL = f"ws://{args.host}/ws/realtime"
         API_BASE = f"{BRAIN_URL}/api/v1"
+
+    global AUTH_TOKEN
+    AUTH_TOKEN = _load_auth_token()
+    if not AUTH_TOKEN:
+        print(f"{RED}Fehler:{RESET} Kein Auth-Token gefunden. NEXUS Agent installiert?")
+        sys.exit(1)
 
     trigger = not args.watch
 
