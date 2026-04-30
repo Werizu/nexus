@@ -263,9 +263,11 @@ async def health():
 
 
 # ─── Devices ──────────────────────────────────────────────
-@app.get("/api/v1/devices", dependencies=[Depends(require_auth)])
-async def list_devices():
-    return await state_store.get_all_devices()
+@app.get("/api/v1/devices")
+async def list_devices(user: dict = Depends(require_auth)):
+    if user.get("role") == "admin":
+        return await state_store.get_all_devices()
+    return await state_store.get_all_devices(owner=user["sub"])
 
 
 @app.get("/api/v1/devices/{device_id}", dependencies=[Depends(require_auth)])
@@ -297,17 +299,20 @@ async def device_command(device_id: str, body: dict):
     return {"status": "ok", "device_id": device_id, "state": state}
 
 
-@app.post("/api/v1/devices", dependencies=[Depends(require_auth)])
-async def create_device(body: dict):
+@app.post("/api/v1/devices")
+async def create_device(body: dict, user: dict = Depends(require_auth)):
     device_id = body.get("id")
     category = body.get("category")
     if not device_id or not category:
         raise HTTPException(400, "Missing 'id' or 'category'")
     if config.get_device(device_id):
         raise HTTPException(409, f"Device '{device_id}' already exists")
+    owner = body.get("owner", user["sub"])
+    body["owner"] = owner
     config.add_device(category, body)
     await state_store.register_device(device_id, category, body.get("name", device_id),
-                                       body.get("plugin", ""), body.get("room", ""), body)
+                                       body.get("plugin", ""), body.get("room", ""), body,
+                                       owner=owner)
     return {"status": "ok", "device_id": device_id}
 
 
@@ -330,9 +335,12 @@ async def delete_device_endpoint(device_id: str):
 
 
 # ─── Scenes ──────────────────────────────────────────────
-@app.get("/api/v1/scenes", dependencies=[Depends(require_auth)])
-async def list_scenes():
-    return scene_engine.list_scenes()
+@app.get("/api/v1/scenes")
+async def list_scenes(user: dict = Depends(require_auth)):
+    all_scenes = scene_engine.list_scenes()
+    if user.get("role") == "admin":
+        return all_scenes
+    return [s for s in all_scenes if not s.get("owner") or s["owner"] == user["sub"]]
 
 
 @app.get("/api/v1/scenes/{scene_name}", dependencies=[Depends(require_auth)])
@@ -343,8 +351,9 @@ async def get_scene(scene_name: str):
     return scene
 
 
-@app.post("/api/v1/scenes", dependencies=[Depends(require_auth)])
-async def create_scene(body: dict):
+@app.post("/api/v1/scenes")
+async def create_scene(body: dict, user: dict = Depends(require_auth)):
+    body.setdefault("owner", user["sub"])
     result = await scene_engine.save_scene(body)
     if "error" in result:
         raise HTTPException(400, result["error"])
@@ -381,21 +390,27 @@ async def trigger_scene(scene_name: str, body: dict | None = None):
 
 
 # ─── Rooms ───────────────────────────────────────────────
-@app.get("/api/v1/rooms", dependencies=[Depends(require_auth)])
-async def list_rooms():
+@app.get("/api/v1/rooms")
+async def list_rooms(user: dict = Depends(require_auth)):
+    is_admin = user.get("role") == "admin"
+    username = user["sub"]
     rooms_data = {}
     for room_id, room in config.rooms.items():
+        room_owner = room.get("owner")
+        if not is_admin and room_owner and room_owner != username:
+            continue
         device_states = []
         for did in room.get("devices", []):
             dev = await state_store.get_device(did)
             if dev:
-                device_states.append(dev)
+                if is_admin or not dev.get("owner") or dev["owner"] == username:
+                    device_states.append(dev)
         rooms_data[room_id] = {**room, "device_states": device_states}
     return rooms_data
 
 
-@app.post("/api/v1/rooms", dependencies=[Depends(require_auth)])
-async def create_room(body: dict):
+@app.post("/api/v1/rooms")
+async def create_room(body: dict, user: dict = Depends(require_auth)):
     room_id = body.get("id")
     if not room_id:
         raise HTTPException(400, "Missing 'id'")
@@ -403,6 +418,7 @@ async def create_room(body: dict):
         raise HTTPException(409, f"Room '{room_id}' already exists")
     room_data = {k: v for k, v in body.items() if k != "id"}
     room_data.setdefault("devices", [])
+    room_data["owner"] = body.get("owner", user["sub"])
     config.add_room(room_id, room_data)
     return {"status": "ok", "room_id": room_id}
 

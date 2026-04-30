@@ -30,6 +30,7 @@ class StateStore:
                 name TEXT NOT NULL,
                 plugin TEXT NOT NULL,
                 room TEXT,
+                owner TEXT,
                 state TEXT DEFAULT '{}',
                 last_seen REAL,
                 config TEXT DEFAULT '{}'
@@ -73,20 +74,44 @@ class StateStore:
         """)
         await self.db.commit()
 
+        # Migrate: add owner column if missing
+        try:
+            await self.db.execute("SELECT owner FROM device_state LIMIT 1")
+        except Exception:
+            await self.db.execute("ALTER TABLE device_state ADD COLUMN owner TEXT")
+            await self.db.commit()
+            logger.info("Migrated device_state: added owner column")
+
+        # Assign ownerless devices to the first admin user
+        cursor = await self.db.execute(
+            "SELECT username FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1"
+        )
+        admin_row = await cursor.fetchone()
+        if admin_row:
+            result = await self.db.execute(
+                "UPDATE device_state SET owner = ? WHERE owner IS NULL",
+                (admin_row[0],)
+            )
+            if result.rowcount > 0:
+                await self.db.commit()
+                logger.info(f"Assigned {result.rowcount} ownerless devices to '{admin_row[0]}'")
+
         cursor = await self.db.execute("SELECT COUNT(*) FROM device_state")
         row = await cursor.fetchone()
         self.device_count = row[0]
         logger.info(f"State store initialized with {self.device_count} devices")
 
     async def register_device(self, device_id: str, category: str, name: str,
-                              plugin: str, room: str | None, device_config: dict):
+                              plugin: str, room: str | None, device_config: dict,
+                              owner: str | None = None):
         await self.db.execute(
-            """INSERT INTO device_state (device_id, category, name, plugin, room, config, last_seen)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO device_state (device_id, category, name, plugin, room, owner, config, last_seen)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(device_id) DO UPDATE SET
                  name=excluded.name, plugin=excluded.plugin,
-                 room=excluded.room, config=excluded.config""",
-            (device_id, category, name, plugin, room, json.dumps(device_config), time.time())
+                 room=excluded.room, owner=COALESCE(excluded.owner, device_state.owner),
+                 config=excluded.config""",
+            (device_id, category, name, plugin, room, owner, json.dumps(device_config), time.time())
         )
         await self.db.commit()
         cursor = await self.db.execute("SELECT COUNT(*) FROM device_state")
@@ -107,8 +132,14 @@ class StateStore:
             return None
         return self._row_to_device(row)
 
-    async def get_all_devices(self) -> list[dict]:
-        cursor = await self.db.execute("SELECT * FROM device_state ORDER BY category, name")
+    async def get_all_devices(self, owner: str | None = None) -> list[dict]:
+        if owner:
+            cursor = await self.db.execute(
+                "SELECT * FROM device_state WHERE owner IS NULL OR owner = ? ORDER BY category, name",
+                (owner,)
+            )
+        else:
+            cursor = await self.db.execute("SELECT * FROM device_state ORDER BY category, name")
         rows = await cursor.fetchall()
         return [self._row_to_device(r) for r in rows]
 
@@ -119,6 +150,7 @@ class StateStore:
             "name": row["name"],
             "plugin": row["plugin"],
             "room": row["room"],
+            "owner": row["owner"],
             "state": json.loads(row["state"]),
             "last_seen": row["last_seen"],
             "config": json.loads(row["config"]),
