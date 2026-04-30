@@ -6,14 +6,14 @@ Self-hosted Smart Home System — runs on a Raspberry Pi, controls lights, plugs
 
 ```
                           ┌─────────────────────────────────┐
-                          │         Tailscale Mesh VPN       │
-                          │    (secure access from anywhere) │
+                          │      Tailscale Mesh VPN         │
+                          │  (secure access from anywhere)  │
                           └──────────┬──────────────────────┘
                                      │
-┌──────────────┐     MQTT      ┌─────┴────────┐     HTTP      ┌──────────────┐
-│  NEXUS Agent │◄─────────────►│  NEXUS Brain  │◄─────────────►│  Dashboard   │
-│  (Win / Mac) │               │  (FastAPI)    │               │  (React PWA) │
-└──────────────┘               └──────┬────────┘               └──────────────┘
+┌──────────────┐     MQTT      ┌─────┴─────────┐     HTTP      ┌─────────────┐
+│  NEXUS Agent │◄─────────────►│  NEXUS Brain  │◄─────────────►│  Dashboard  │
+│  (Win / Mac) │               │  (FastAPI)    │               │  (React PWA)│
+└──────────────┘               └──────┬────────┘               └─────────────┘
                                       │
               ┌───────────┬───────────┼───────────┬───────────┐
               │           │           │           │           │
