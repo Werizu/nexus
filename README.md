@@ -148,6 +148,51 @@ tailscale ip -4
 
 Update `config/nexus.yaml` and `config/devices.yaml` to use Tailscale IPs. The dashboard is then accessible from anywhere via `http://<tailscale-ip>`.
 
+### 6. Anderen Benutzer einrichten (Multi-User)
+
+NEXUS unterstützt mehrere Benutzer — z.B. ein Freund, der per RDP auf deinen PC zugreifen soll.
+
+#### Schritt 1: Tailscale-Zugang
+
+Dein Freund braucht Zugang zu deinem Tailscale-Netzwerk, damit er Dashboard und PC erreichen kann.
+
+1. Öffne [Tailscale Admin Console](https://login.tailscale.com/admin/users)
+2. Gehe zu **Users → Invite users**
+3. Gib die E-Mail deines Freundes ein und sende die Einladung
+4. Dein Freund installiert Tailscale auf seinem Mac/PC und meldet sich mit der Einladung an
+5. Sein Gerät ist jetzt Teil deines Tailnets und kann alle Geräte (Pi, PC) direkt erreichen
+
+> **Tailscale Free** erlaubt bis zu 3 Benutzer und 100 Geräte — mehr als genug.
+
+#### Schritt 2: NEXUS-Account anlegen
+
+1. Öffne das Dashboard unter `http://<tailscale-ip>`
+2. Melde dich als Admin an
+3. Klicke auf das **Zahnrad-Icon** (oben rechts) → **Benutzerverwaltung**
+4. Klicke **+ Neuer Benutzer**
+5. Vergib Benutzername, Anzeigename, Passwort und Rolle (`user` reicht)
+6. Teile die Zugangsdaten mit deinem Freund
+
+#### Schritt 3: Windows-Benutzer für RDP (optional)
+
+Wenn zwei Personen gleichzeitig per RDP auf den PC zugreifen sollen, braucht jeder einen eigenen Windows-Benutzer:
+
+1. Auf dem Windows-PC: **Einstellungen → Konten → Familie & andere Benutzer → Konto hinzufügen**
+2. Neuen lokalen Account erstellen
+3. Unter **Einstellungen → System → Remotedesktop**: den neuen Benutzer zu den erlaubten Remote-Benutzern hinzufügen
+4. Dein Freund verbindet sich per RDP mit seinem eigenen Windows-Login
+
+> **Hinweis:** Standardmäßig erlaubt Windows nur eine aktive RDP-Sitzung gleichzeitig. Für gleichzeitige Nutzung wird ein RDP-Wrapper oder Windows Server benötigt.
+
+#### Zusammenfassung
+
+| Was | Wo |
+|---|---|
+| Tailscale einladen | [admin.tailscale.com](https://login.tailscale.com/admin/users) → Invite |
+| NEXUS-Account anlegen | Dashboard → Zahnrad → + Neuer Benutzer |
+| Windows-User für RDP | Windows Einstellungen → Konten |
+| Dashboard-Zugang | `http://<tailscale-ip>` im Browser |
+
 ## Configuration
 
 ### devices.yaml
