@@ -99,39 +99,49 @@ alerts:
   cooldown: 300
 "@ | Out-File "$InstallDir\config.yaml" -Encoding UTF8
 
-# Install dependencies (pywin32 first, then the rest)
+# Install dependencies
 Write-Host "  [5/6] Dependencies installieren..." -ForegroundColor Yellow
 python -m pip install --quiet --upgrade pip 2>&1 | Out-Null
-python -m pip install --quiet pywin32 2>&1 | Out-Null
 python -m pip install --quiet -r "$InstallDir\requirements.txt" 2>&1 | Out-Null
 Write-Host "  OK: Alle Dependencies installiert" -ForegroundColor Green
 
-# Install and start service
-Write-Host "  [6/6] Windows-Dienst einrichten..." -ForegroundColor Yellow
-$svc = Get-Service -Name "NexusAgent" -ErrorAction SilentlyContinue
-if ($svc) {
-    Stop-Service NexusAgent -Force -ErrorAction SilentlyContinue
-    python "$InstallDir\nexus_service.py" remove 2>&1 | Out-Null
-    Start-Sleep 2
-}
-python "$InstallDir\nexus_service.py" install 2>&1 | Out-Null
-Set-Service -Name "NexusAgent" -StartupType Automatic
-python "$InstallDir\nexus_service.py" start 2>&1 | Out-Null
+# Autostart via Scheduled Task (robust — kein pywin32-Dienst)
+Write-Host "  [6/6] Autostart einrichten..." -ForegroundColor Yellow
+$taskName = "NEXUS Agent"
+# Altlasten entfernen (Task + evtl. kaputter Dienst aelterer Versionen) — Fehler ignorieren
+schtasks /End    /TN $taskName     2>$null | Out-Null
+schtasks /Delete /TN $taskName /F  2>$null | Out-Null
+cmd /c "sc.exe stop NexusAgent"    2>$null | Out-Null
+cmd /c "sc.exe delete NexusAgent"  2>$null | Out-Null
 
-# Verify
-Start-Sleep 3
-$svc = Get-Service -Name "NexusAgent" -ErrorAction SilentlyContinue
-if ($svc -and $svc.Status -eq "Running") {
-    Write-Host "  OK: Dienst laeuft!" -ForegroundColor Green
+# pythonw -> laeuft ohne Konsolenfenster
+$pythonw = (Get-Command python).Source -replace 'python\.exe$', 'pythonw.exe'
+if (-not (Test-Path $pythonw)) { $pythonw = (Get-Command python).Source }
+$agentPath = "$InstallDir\nexus_agent.py"
+
+$action    = New-ScheduledTaskAction -Execute $pythonw -Argument "`"$agentPath`""
+$trigger   = New-ScheduledTaskTrigger -AtLogOn
+$settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+Start-ScheduledTask -TaskName $taskName
+Write-Host "  OK: Autostart-Task '$taskName' angelegt + gestartet" -ForegroundColor Green
+
+# Verify — Log auf erfolgreiche MQTT-Verbindung pruefen
+Start-Sleep 6
+$log = "$InstallDir\nexus-agent.log"
+$connected = $false
+if (Test-Path $log) { if ((Get-Content $log -Tail 12) -match "Connected to MQTT") { $connected = $true } }
+
+Write-Host ""
+if ($connected) {
+    Write-Host "  OK: Verbunden! Dein PC erscheint jetzt im NEXUS-Dashboard." -ForegroundColor Green
 } else {
-    Write-Host "  [!] Dienst konnte nicht gestartet werden" -ForegroundColor Yellow
-    Write-Host "  Test manuell: python `"$InstallDir\nexus_agent.py`"" -ForegroundColor Gray
+    Write-Host "  [!] Noch kein 'Connected' im Log — laeuft Tailscale? Letzte Zeilen:" -ForegroundColor Yellow
+    if (Test-Path $log) { Get-Content $log -Tail 8 | ForEach-Object { Write-Host "    $_" -ForegroundColor Gray } }
 }
-
 Write-Host ""
-Write-Host "  NEXUS Agent installiert! Geraet erscheint im Dashboard." -ForegroundColor Green
-Write-Host ""
-Write-Host "  Status:       Get-Service NexusAgent" -ForegroundColor Gray
+Write-Host "  Status:       Get-ScheduledTask -TaskName 'NEXUS Agent'" -ForegroundColor Gray
 Write-Host "  Logs:         Get-Content `"$InstallDir\nexus-agent.log`" -Tail 20" -ForegroundColor Gray
-Write-Host "  Deinstall.:   python `"$InstallDir\nexus_service.py`" remove" -ForegroundColor Gray
+Write-Host "  Deinstall.:   schtasks /Delete /TN 'NEXUS Agent' /F; Remove-Item -Recurse -Force `"$InstallDir`"" -ForegroundColor Gray
 Write-Host ""
