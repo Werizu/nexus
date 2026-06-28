@@ -108,11 +108,12 @@ Write-Host "  OK: Alle Dependencies installiert" -ForegroundColor Green
 # Autostart via Scheduled Task (robust — kein pywin32-Dienst)
 Write-Host "  [6/6] Autostart einrichten..." -ForegroundColor Yellow
 $taskName = "NEXUS Agent"
-# Altlasten entfernen (Task + evtl. kaputter Dienst aelterer Versionen) — Fehler ignorieren
-schtasks /End    /TN $taskName     2>$null | Out-Null
-schtasks /Delete /TN $taskName /F  2>$null | Out-Null
-cmd /c "sc.exe stop NexusAgent"    2>$null | Out-Null
-cmd /c "sc.exe delete NexusAgent"  2>$null | Out-Null
+# Altlasten entfernen (Task + evtl. kaputter Dienst aelterer Versionen).
+# In cmd kapseln (>nul 2>&1), damit stderr NICHT als PowerShell-Fehler abbricht.
+cmd /c "schtasks /End /TN ""$taskName"" >nul 2>&1"
+cmd /c "schtasks /Delete /TN ""$taskName"" /F >nul 2>&1"
+cmd /c "sc stop NexusAgent >nul 2>&1"
+cmd /c "sc delete NexusAgent >nul 2>&1"
 
 # pythonw -> laeuft ohne Konsolenfenster
 $pythonw = (Get-Command python).Source -replace 'python\.exe$', 'pythonw.exe'
