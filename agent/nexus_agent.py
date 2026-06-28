@@ -93,6 +93,10 @@ class NexusAgent:
         self.device_name = agent_conf.get("name", platform.node())
         self.report_interval = agent_conf.get("report_interval", 10)
 
+        auth_conf = config.get("auth", {})
+        self.username = auth_conf.get("username")
+        self.password = auth_conf.get("password")
+
         self._alert_thresholds = {
             "cpu": alerts_conf.get("cpu", 90),
             "ram": alerts_conf.get("ram", 90),
@@ -124,6 +128,9 @@ class NexusAgent:
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
+
+        if self.username:
+            self._client.username_pw_set(self.username, self.password)
 
         self._client.will_set(
             self._state_topic,
@@ -510,8 +517,15 @@ def main():
         device_id = result["device_id"]
         config.setdefault("agent", {})["device_id"] = device_id
         config["agent"]["name"] = platform.node()
-        config.setdefault("mqtt", {})["client_id"] = f"nexus-agent-{device_id}"
-        config["auth"]["token"] = result["token"]
+        # MQTT-Broker-Credentials vom Brain uebernehmen. Ersetzt das NEXUS-Login,
+        # damit das NEXUS-Passwort NICHT dauerhaft auf der Platte liegt.
+        config.setdefault("mqtt", {})["client_id"] = result.get("username") or f"nexus-agent-{device_id}"
+        if result.get("port"):
+            config["mqtt"]["port"] = result["port"]
+        config["auth"] = {
+            "username": result.get("username"),
+            "password": result.get("password"),
+        }
         save_config(config)
         logger.info(f"Registered as '{device_id}' — config saved")
 

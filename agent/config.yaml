@@ -1,13 +1,25 @@
 # NEXUS Agent Configuration
+# Wird normalerweise vom Installer (install.ps1) automatisch erzeugt.
+#
+# Ablauf: Der Installer fragt Brain-IP + NEXUS-Login ab, registriert das
+# Geraet am Brain (/api/v1/agent/register) und traegt hier die vom Brain
+# ausgestellten EINDEUTIGEN MQTT-Credentials + device_id ein. Das
+# NEXUS-Passwort wird NICHT gespeichert.
+#
+# Beispiel (Platzhalter — echte Werte kommen vom Brain):
 mqtt:
   broker: "100.122.236.58"
   port: 1883
-  client_id: "nexus-agent-pc"
+  client_id: "nexus-agent-<device_id>"
 
 agent:
-  device_id: "main_pc"
+  device_id: "<vom-brain-vergeben>"
   name: "Desktop PC"
   report_interval: 10
+
+auth:
+  username: "nexus-agent-<device_id>"   # MQTT-Broker-User (vom Brain)
+  password: "<vom-brain-vergeben>"      # MQTT-Broker-Passwort (vom Brain)
 
 alerts:
   cpu: 90
